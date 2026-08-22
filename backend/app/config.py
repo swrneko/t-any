@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     webhook_timeout_seconds: float = 10.0
 
     auth_mode: AuthMode = "builtin"
+    # Usernames that are administrators whatever the database says, comma
+    # separated. Behind a proxy every identity arrives non-admin, so without
+    # this an instance would have nobody who can configure it; in builtin mode
+    # it is also the way back in when the only password is lost.
+    admin_users: str = ""
     proxy_user_header: str = "X-Remote-User"
     session_cookie_name: str = "ta_session"
     session_max_age_days: int = 30
@@ -81,6 +86,10 @@ class Settings(BaseSettings):
     # first thing everyone does is open http://localhost:8927, and a cookie
     # the browser silently drops looks exactly like a broken login.
     session_cookie_secure: bool = False
+
+    @property
+    def admin_usernames(self) -> frozenset[str]:
+        return frozenset(name.strip() for name in self.admin_users.split(",") if name.strip())
 
     @property
     def db_dir(self) -> Path:

@@ -80,6 +80,11 @@ All settings are environment variables; see [.env.example](.env.example).
 | `proxy` | Identity comes from a reverse proxy header (Authelia, authentik). |
 | `disabled` | No authentication. Only reasonable behind a trusted localhost. |
 
+`ADMIN_USERS=alice,bob` names administrators regardless of what the database
+says. Set it whenever `AUTH_MODE=proxy`: identities arriving from a proxy have
+no admin flag, so without it nobody can edit providers or manage accounts. In
+`builtin` mode it doubles as the way back in when the only password is lost.
+
 ## Data and backups
 
 Everything lives in one volume: the SQLite database, the normalised audio, and

@@ -122,7 +122,14 @@
     "diarizer_unreachable": "Cannot reach the diariser. The transcript is complete; only the speakers are missing.",
     "diarizer_failed": "The diariser refused the recording. The transcript is complete; only the speakers are missing.",
     "speaker_not_found": "No such speaker in this recording.",
-    "segment_not_found": "That line is no longer part of this transcript."
+    "segment_not_found": "That line is no longer part of this transcript.",
+    "admin_required": "That needs an administrator.",
+    "provider_not_found": "No such provider.",
+    "last_stt_provider": "This is the only speech-to-text provider — add another before removing it.",
+    "provider_unreachable": "Nothing answered at that address.",
+    "provider_rejected": "The endpoint answered {{status}} — usually a missing or wrong key.",
+    "provider_not_openai": "Something answered, but not like an OpenAI-compatible server.",
+    "probe_without_target": "There is no address to test yet."
   },
   "summary": {
     "title": "Summaries",
@@ -231,7 +238,7 @@
       "dates": "Dates follow the interface language, not the browser's."
     },
     "providers": {
-      "explanation": "Where speech-to-text and summarising happen. Editing them here is coming; this is what the instance uses today.",
+      "explanation": "Where speech-to-text and summarising happen. Keys are stored encrypted and only ever come back masked.",
       "empty": "No providers yet.",
       "seeding": "An empty list is filled from .env once at startup, and the database rules from then on.",
       "default": "Default",
@@ -240,8 +247,25 @@
       "context": "{{tokens}} tokens of context",
       "kind": {
         "stt": "Speech to text",
-        "llm": "Language model"
-      }
+        "llm": "Language model",
+        "label": "Kind"
+      },
+      "new": "Add provider",
+      "edit": "Edit",
+      "delete": "Remove",
+      "name": "Name",
+      "baseUrl": "Address",
+      "urlHint": "The OpenAI-compatible base, ending in /v1. Inside Docker a server on the host is host.docker.internal, not localhost.",
+      "apiKey": "API key",
+      "clearKey": "Remove the stored key",
+      "keyCleared": "The key will be removed on save",
+      "model": "Default model",
+      "contextTokens": "Context window",
+      "contextHint": "In tokens. Guessing high is the dangerous direction: an over-long prompt is truncated silently.",
+      "makeDefault": "Use this one by default",
+      "test": "Test connection",
+      "answered": "answered in {{ms}} ms · models: {{models}}",
+      "testHint": "This asks /v1/models. Not every OpenAI-compatible server offers it, so silence here does not always mean it will not work."
     }
   },
   "history": {

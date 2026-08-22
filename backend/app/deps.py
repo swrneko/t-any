@@ -111,6 +111,26 @@ async def get_current_user(
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
 
+def is_admin(user: User, settings: Settings) -> bool:
+    """The flag on the row, or the name in the environment -- either is enough.
+
+    Additive on purpose: turning ADMIN_USERS on must not silently demote the
+    administrator the setup wizard created, and behind a proxy the flag is never
+    set at all, so the environment is the only way anyone can configure the
+    instance.
+    """
+    return user.is_admin or user.username in settings.admin_usernames
+
+
+async def get_admin_user(user: CurrentUserDep, settings: SettingsDep) -> User:
+    if not is_admin(user, settings):
+        raise ApiError(403, "admin_required", "This needs an administrator.")
+    return user
+
+
+AdminDep = Annotated[User, Depends(get_admin_user)]
+
+
 async def get_session_user(request: Request, user: CurrentUserDep) -> User:
     """A user who signed in, not a script holding a key.
 

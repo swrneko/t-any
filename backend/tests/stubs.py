@@ -224,10 +224,12 @@ class LlmStub:
         self._reply_for = reply_for or (lambda index: f"summary {index}")
         self.status = status
         self.calls: list[RecordedCompletion] = []
+        self.authorizations: list[str | None] = []
         self.app = FastAPI()
 
         @self.app.get("/v1/models")
-        async def list_models() -> dict[str, Any]:
+        async def list_models(request: Request) -> dict[str, Any]:
+            self.authorizations.append(request.headers.get("Authorization"))
             return {"data": [{"id": name, "object": "model"} for name in (models or ["stub-llm"])]}
 
         @self.app.post("/v1/chat/completions")

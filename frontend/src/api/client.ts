@@ -151,15 +151,38 @@ export interface SharedTranscript {
   speakers: { label: string; display_name: string | null }[];
 }
 
+export type ProviderKind = "stt" | "llm";
+
 export interface Provider {
   id: string;
-  kind: "stt" | "llm";
+  kind: ProviderKind;
   name: string;
   base_url: string;
   default_model: string | null;
   context_tokens: number | null;
   is_default: boolean;
+  /** Masked, always. The key itself never comes back out of the server. */
   api_key: string | null;
+}
+
+export interface ProviderDraft {
+  kind: ProviderKind;
+  name: string;
+  base_url: string;
+  /** Omitted keeps the stored key, "" clears it, anything else replaces it. */
+  api_key?: string;
+  default_model: string | null;
+  context_tokens: number | null;
+  is_default: boolean;
+}
+
+/** What the endpoint said when asked. A refusal is an answer, not an error. */
+export interface ProviderProbe {
+  reachable: boolean;
+  status: number | null;
+  latency_ms: number | null;
+  models: string[];
+  error_code: string | null;
 }
 
 /**
@@ -319,6 +342,25 @@ export const api = {
   revokeToken: (id: string) => request<void>(`/api/tokens/${id}`, { method: "DELETE" }),
 
   listProviders: () => request<Provider[]>("/api/providers"),
+
+  createProvider: (draft: ProviderDraft) =>
+    request<Provider>("/api/providers", { method: "POST", body: JSON.stringify(draft) }),
+
+  updateProvider: (id: string, changes: Partial<ProviderDraft>) =>
+    request<Provider>(`/api/providers/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(changes),
+    }),
+
+  deleteProvider: (id: string) => request<void>(`/api/providers/${id}`, { method: "DELETE" }),
+
+  /** Ask an address whether anything lives there — a saved provider by id, or a
+   *  draft that has not been committed to yet. */
+  testProvider: (target: { provider_id?: string; base_url?: string; api_key?: string }) =>
+    request<ProviderProbe>("/api/providers/test", {
+      method: "POST",
+      body: JSON.stringify(target),
+    }),
 
   listPresets: () => request<Preset[]>("/api/presets"),
 

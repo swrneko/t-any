@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from app.deps import CurrentUserDep, SessionDep, SettingsDep
+from app.deps import CurrentUserDep, SessionDep, SettingsDep, is_admin
 from app.errors import ApiError
 from app.models import User
 from app.schemas import UserOut
@@ -49,5 +49,7 @@ async def logout(response: Response, settings: SettingsDep) -> None:
 
 
 @router.get("/me")
-async def current_user(user: CurrentUserDep) -> UserOut:
-    return UserOut.model_validate(user)
+async def current_user(user: CurrentUserDep, settings: SettingsDep) -> UserOut:
+    # The effective answer, not the column: an admin named in the environment is
+    # an admin, and the UI decides what to show from this.
+    return UserOut.model_validate(user).model_copy(update={"is_admin": is_admin(user, settings)})

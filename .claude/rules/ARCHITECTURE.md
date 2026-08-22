@@ -56,6 +56,8 @@ them readable in order.
 │   │   ├── storage.py          streaming upload to disk with SHA-256
 │   │   ├── sources.py          link -> file: httpx for media, yt-dlp for pages
 │   │   ├── media.py            ffprobe and ffmpeg; the only media knowledge
+│   │   ├── probe.py            asks an endpoint for /v1/models; the API's only
+│   │   │                       outbound call
 │   │   ├── stt.py              OpenAI transcription protocol client
 │   │   ├── llm.py              OpenAI chat protocol client, plain and streamed
 │   │   ├── diarize.py          the diariser's own protocol, and the overlap merge
@@ -117,10 +119,14 @@ them readable in order.
 
 ## Status
 
-Milestone 7 (SPEC §13) is under way: the navigation move is done -- three
+Milestone 7 (SPEC §13) is under way. Done: the navigation move -- three
 screens, settings as a shell over addressed sections, search folded into the
-archive -- and nothing behind it is built yet. Deletion, retention, users and
-provider editing come next, in that order.
+archive; and providers, which are now written from the UI behind a real admin
+gate (`ADMIN_USERS` names administrators whatever the database says, because
+behind a proxy nothing else can), with one default per kind enforced by a
+partial unique index and a connection test that reports what `/v1/models`
+answered. Deletion and retention, then users, then the API section come next,
+in that order.
 
 All planned milestones (0 to 6) are complete: auth, the transcription pipeline, chunking on
 silence, live progress over SSE, cancellation that really stops the work,
@@ -153,8 +159,9 @@ Known gaps left deliberately open:
 - The token estimate is characters divided by three, not a tokeniser. It is
   deliberately pessimistic, so it splits earlier than strictly necessary.
 
-- A provider can only be created from the environment; editing it in the UI
-  arrives with the settings screen.
+- The connection test asks `/v1/models`, which is part of the OpenAI surface
+  but not universal: a server that does not implement it looks unreachable
+  while working perfectly. The wording in the UI says so; nothing else can.
 - `language` comes back from the provider verbatim and is fed straight back to
   later chunks. OpenAI answers `english` where faster-whisper answers `en`, and
   only the second form is a valid input. Against a cloud endpoint this silently

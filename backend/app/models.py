@@ -84,6 +84,18 @@ class Provider(Base):
     is_default: Mapped[bool] = mapped_column(sa.Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
+    # One default per kind, said where it cannot be argued with: the API demotes
+    # the previous one in the same transaction, and anything that does not is
+    # refused by the database rather than left picking a row at random.
+    __table_args__ = (
+        sa.Index(
+            "uq_providers_default_per_kind",
+            "kind",
+            unique=True,
+            sqlite_where=sa.text("is_default"),
+        ),
+    )
+
 
 class Job(Base):
     __tablename__ = "jobs"

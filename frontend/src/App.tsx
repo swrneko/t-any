@@ -67,6 +67,7 @@ export default function App() {
               <LoginPage onLoggedIn={setUser} />
             ) : (
               <Workspace
+                user={user}
                 authMode={status.auth_mode}
                 onLogout={() => {
                   void logout();
@@ -82,7 +83,15 @@ export default function App() {
 
 /** Everything behind the gate. The job feed is held here rather than in a page
  *  so that walking to the archive and back does not lose the queue. */
-function Workspace({ authMode, onLogout }: { authMode: AuthMode; onLogout: () => void }) {
+function Workspace({
+  user,
+  authMode,
+  onLogout,
+}: {
+  user: User;
+  authMode: AuthMode;
+  onLogout: () => void;
+}) {
   const feed = useJobFeed();
 
   return (
@@ -95,7 +104,7 @@ function Workspace({ authMode, onLogout }: { authMode: AuthMode; onLogout: () =>
         <Route path="/settings" element={<SettingsPage />}>
           <Route index element={<Navigate to="appearance" replace />} />
           <Route path="appearance" element={<AppearanceSection />} />
-          <Route path="providers" element={<ProvidersSection />} />
+          <Route path="providers" element={<ProvidersSection isAdmin={user.is_admin} />} />
           <Route path="presets" element={<PresetsPage />} />
           <Route path="api" element={<ApiSection />} />
         </Route>

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,6 +25,50 @@ class ProviderOut(BaseModel):
     is_default: bool
     # Always masked. The full key leaves this process only towards the provider.
     api_key: str | None
+
+
+class ProviderIn(BaseModel):
+    kind: Literal["stt", "llm"]
+    name: str = Field(min_length=1, max_length=128)
+    base_url: str = Field(min_length=1)
+    api_key: str | None = None
+    default_model: str | None = None
+    context_tokens: int | None = Field(default=None, gt=0)
+    is_default: bool = False
+
+
+class ProviderPatch(BaseModel):
+    """Everything optional, and the key follows its own rule.
+
+    Absent leaves the stored key alone, an empty string clears it, and anything
+    else replaces it. The mask this API hands out is never accepted back, or a
+    round trip through the edit form would overwrite the key with its own
+    disguise.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    base_url: str | None = Field(default=None, min_length=1)
+    api_key: str | None = None
+    default_model: str | None = None
+    context_tokens: int | None = Field(default=None, gt=0)
+    is_default: bool | None = None
+
+
+class ProviderProbeIn(BaseModel):
+    """A saved provider, or a draft nobody has committed to yet."""
+
+    provider_id: uuid.UUID | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+
+
+class ProviderProbeOut(BaseModel):
+    reachable: bool
+    status: int | None = None
+    latency_ms: int | None = None
+    models: list[str] = []
+    # A failed probe is a successful request: the verdict travels in the body.
+    error_code: str | None = None
 
 
 class JobOut(BaseModel):
