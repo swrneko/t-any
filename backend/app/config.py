@@ -1,3 +1,4 @@
+import socket
 from pathlib import Path
 from typing import Literal
 
@@ -27,6 +28,11 @@ class Settings(BaseSettings):
     sse_poll_seconds: float = 1.0
     cancel_poll_seconds: float = 1.0
     heartbeat_stale_seconds: float = 120.0
+
+    # How long a worker may go without showing a sign of life before its own
+    # container calls it dead. Generous next to the two seconds an idle loop
+    # takes to come round: a restart costs a claimed job its progress.
+    worker_stale_seconds: float = 60.0
 
     # How long to wait for a remote server to answer at all. The body itself is
     # given no deadline: a long recording takes as long as it takes.
@@ -114,6 +120,17 @@ class Settings(BaseSettings):
     @property
     def secret_key_path(self) -> Path:
         return self.data_dir / "secret.key"
+
+    @property
+    def worker_liveness_path(self) -> Path:
+        """Where a worker says it is still turning.
+
+        Named after the host rather than the process, so a restarted worker
+        reuses its own file instead of leaving one behind, and two workers on
+        one volume cannot vouch for each other. The check runs inside the
+        container it is asking about, which is what makes the name line up.
+        """
+        return self.tmp_dir / f"worker-{socket.gethostname()}.alive"
 
     def ensure_dirs(self) -> None:
         for directory in (self.db_dir, self.media_dir, self.tmp_dir):

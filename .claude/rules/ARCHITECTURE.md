@@ -237,5 +237,10 @@ Known gaps left deliberately open:
   namespace is the real fix and is not done.
 - Both SSE streams poll the database on a timer. That is fine at this size and
   survives multiple API processes, which a shared in-memory bus would not.
-- The worker has no healthcheck; `docker-compose.yml` disables the inherited
-  one. A real probe belongs on `heartbeat_at`.
+- The worker's healthcheck reports and nothing acts on it: compose marks the
+  container unhealthy and leaves it running, because `restart:` does not watch
+  health. Something outside has to be looking.
+- Nothing tells the UI that no worker is running. The liveness file sits on the
+  volume the API can read, but it is named after the worker's host, so the API
+  would be guessing at names rather than asking a question -- and a queue that
+  never moves is the most confusing failure this thing has.

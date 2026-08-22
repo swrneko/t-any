@@ -22,11 +22,17 @@ services:
     volumes:
       - data:/data
     # The image's healthcheck curls the API port, which the worker does not
-    # serve. A real liveness probe belongs on the heartbeat column and arrives
-    # with job recovery; until then, an inherited check that can only ever fail
-    # is worse than none.
+    # serve. It asks the worker itself instead: the loop leaves a mark as it
+    # comes round, and a process holding the container open with a loop that
+    # has stopped is exactly the failure nothing else notices. Compose reports
+    # the verdict and does not act on it -- `docker ps` and whatever watches it
+    # are the audience.
     healthcheck:
-      disable: true
+      test: ["CMD", "python", "-m", "app.worker", "--health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     # Waits for the API, which owns the migrations. The worker never touches
     # the schema itself -- two processes racing alembic is a bad first minute.
     depends_on:

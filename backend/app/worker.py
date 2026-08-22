@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import socket
+import sys
 import time
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
@@ -42,6 +43,21 @@ RETRYABLE_CODES = frozenset({"stt_unreachable", "stt_server_error"})
 
 def worker_identity() -> str:
     return f"{socket.gethostname()}:{os.getpid()}"
+
+
+def worker_is_alive(settings: Settings) -> bool:
+    """Whether the worker in this container has shown a sign of life lately.
+
+    It serves no port, so there is nothing to curl: the question is whether its
+    loop is still turning, and the answer is a file it touches as it goes. A
+    process that is still holding the container open with a loop that has
+    stopped is worse than one that exited -- nothing restarts the first.
+    """
+    try:
+        beat = settings.worker_liveness_path.stat().st_mtime
+    except OSError:
+        return False
+    return time.time() - beat <= settings.worker_stale_seconds
 
 
 class Worker:
@@ -155,9 +171,21 @@ class Worker:
             return await sweep_expired(session, self.settings)
 
     async def run_once(self) -> bool:
+        self._pulse()
         # Transcription first: a summary is worthless until its transcript
         # exists, and a queue of summaries must not starve new recordings.
         return await self._run_transcription() or await self._run_summary()
+
+    def _pulse(self) -> None:
+        """Leave a mark saying the loop came round.
+
+        Every turn, and again from the supervisor while a job is being worked:
+        a two-hour recording is a single turn of the loop, and liveness that
+        only ticked between jobs would call the busiest worker dead.
+        """
+        path = self.settings.worker_liveness_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
 
     async def _run_summary(self) -> bool:
         summary_id = await self._claim_summary()
@@ -204,6 +232,7 @@ class Worker:
         """Keep the heartbeat fresh, and drop the request when a stop arrives."""
         while True:
             await asyncio.sleep(self.settings.cancel_poll_seconds)
+            self._pulse()
             async with self.database.session_factory() as session:
                 status = await session.scalar(
                     select(Summary.status).where(Summary.id == summary_id)
@@ -363,6 +392,7 @@ class Worker:
         """
         while True:
             await asyncio.sleep(self.settings.cancel_poll_seconds)
+            self._pulse()
             async with self.database.session_factory() as session:
                 status = await session.scalar(select(Job.status).where(Job.id == job_id))
                 if status == "cancelling":
@@ -747,4 +777,8 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    # `python -m app.worker --health` is the container's own liveness probe: the
+    # same module, so it reads the same settings the worker is running under.
+    if "--health" in sys.argv[1:]:
+        raise SystemExit(0 if worker_is_alive(Settings()) else 1)
     asyncio.run(main())
