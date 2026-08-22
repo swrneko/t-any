@@ -425,6 +425,47 @@ async def cancel_job(
     return _present(job, settings)
 
 
+@router.post("/{job_id}/diarize")
+async def diarize_job(
+    job_id: uuid.UUID, user: CurrentUserDep, session: SessionDep, settings: SettingsDep
+) -> JobOut:
+    """Ask who was speaking, on a recording that has already been transcribed.
+
+    The words are not asked for again: the transcript is what costs money and
+    minutes, and it is the one thing this cannot change. The job goes back in
+    the queue carrying the stage it is queued for, and the worker reads that as
+    the whole of the work rather than the end of it.
+    """
+    job = await _owned_job(session, user, job_id)
+    _check_diarizer(settings, True)
+    _require_finished(job)
+
+    if job.status != "done":
+        raise ApiError(
+            409,
+            "job_not_finished",
+            "There is nothing to attribute until the recording is transcribed.",
+            status=job.status,
+        )
+    if _audio_bytes(settings, job.id) is None:
+        raise ApiError(
+            409,
+            "audio_gone",
+            "The recording itself is no longer here, and the diariser needs it.",
+        )
+
+    job.diarize = True
+    job.stage = "diarizing"
+    job.status = "queued"
+    job.progress = 0.0
+    job.error_code = None
+    job.error_message = None
+    job.error_params = None
+    job.finished_at = None
+    await session.commit()
+    return _present(job, settings)
+
+
 def _require_finished(job: Job) -> None:
     """A recording still being worked on is not deleted, it is cancelled first.
 

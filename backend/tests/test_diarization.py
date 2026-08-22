@@ -219,6 +219,84 @@ async def test_a_diariser_that_fails_does_not_cost_the_transcript(
         assert transcript["speakers"] == []
 
 
+async def test_a_finished_recording_can_be_diarised_afterwards(
+    tmp_path: Path, sample_audio: Path
+) -> None:
+    """Deciding after reading it that you want to know who said what used to
+    mean handing the whole recording in again."""
+    settings = settings_with_diarizer(tmp_path)
+    stt = SttStub()
+
+    async with running_client(settings) as client:
+        job = await upload(client, sample_audio)
+        await run_worker_once(settings, stt, DiarizerStub(TWO_VOICES))
+
+        asked = await client.post(f"/api/jobs/{job['id']}/diarize")
+        assert asked.status_code == 200, asked.text
+        assert asked.json()["status"] == "queued"
+        assert asked.json()["diarize"] is True
+
+        await run_worker_once(settings, stt, DiarizerStub(TWO_VOICES))
+
+        finished = (await client.get(f"/api/jobs/{job['id']}")).json()
+        transcript = (await client.get(f"/api/jobs/{job['id']}/transcript")).json()
+
+    assert finished["status"] == "done"
+    assert [segment["speaker"] for segment in transcript["segments"]] == [
+        "SPEAKER_00",
+        "SPEAKER_01",
+    ]
+    assert [speaker["label"] for speaker in transcript["speakers"]] == [
+        "SPEAKER_00",
+        "SPEAKER_01",
+    ]
+    # The expensive half was already done, and the words are unchanged.
+    assert len(stt.calls) == 1
+    assert transcript["text"] == "Hello there. General Kenobi."
+
+
+async def test_diarisation_cannot_be_asked_for_once_the_audio_is_gone(
+    tmp_path: Path, sample_audio: Path
+) -> None:
+    """Keeping only the words is a choice the archive offers; it costs the
+    ability to ask the diariser anything, because there is nothing to send."""
+    settings = settings_with_diarizer(tmp_path)
+
+    async with running_client(settings) as client:
+        job = await upload(client, sample_audio)
+        await run_worker_once(settings, SttStub(), DiarizerStub(TWO_VOICES))
+        await client.delete(f"/api/jobs/{job['id']}/audio")
+
+        refused = await client.post(f"/api/jobs/{job['id']}/diarize")
+
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "audio_gone"
+
+
+async def test_a_second_diarisation_that_fails_leaves_the_first_one_standing(
+    tmp_path: Path, sample_audio: Path
+) -> None:
+    """Asking again is meant to be safe: a diariser that is down must not turn
+    a transcript that knows its speakers into one that does not."""
+    settings = settings_with_diarizer(tmp_path)
+
+    async with running_client(settings) as client:
+        job = await upload(client, sample_audio, diarize=True)
+        await run_worker_once(settings, SttStub(), DiarizerStub(TWO_VOICES))
+
+        await client.post(f"/api/jobs/{job['id']}/diarize")
+        await run_worker_once(settings, SttStub(), DiarizerStub(status=500))
+
+        finished = (await client.get(f"/api/jobs/{job['id']}")).json()
+        transcript = (await client.get(f"/api/jobs/{job['id']}/transcript")).json()
+
+    assert finished["error_code"] == "diarizer_failed"
+    assert [segment["speaker"] for segment in transcript["segments"]] == [
+        "SPEAKER_00",
+        "SPEAKER_01",
+    ]
+
+
 async def test_a_renamed_speaker_redraws_the_transcript_and_its_exports(
     tmp_path: Path, sample_audio: Path
 ) -> None:

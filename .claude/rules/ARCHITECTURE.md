@@ -180,9 +180,10 @@ Known gaps left deliberately open:
   progress of its own -- the stage says what is happening and never says how
   far it has got. Streaming it would mean chunking two models against each
   other.
-- A diariser that fails leaves the transcript finished and the failure recorded
-  on the job. There is no way to ask for diarisation again afterwards short of
-  submitting the recording a second time.
+- Diarisation can be asked for again on a finished recording, and the words are
+  not asked for again with it -- but the whole recording goes back to the
+  diariser every time. There is no way to attribute one stretch of it, and a
+  recording whose audio has been freed cannot be asked at all.
 - Nothing checks that the diariser is reachable before a job is queued: the
   `has_diarizer` flag says a URL is configured, not that anything answers it.
 

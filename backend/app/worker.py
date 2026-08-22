@@ -448,6 +448,13 @@ class Worker:
         workspace = self.settings.tmp_dir / str(job.id)
         audio = self.settings.media_dir / str(job.id) / "audio.ogg"
 
+        # Queued with a stage already on it: somebody asked for that part alone.
+        # Recovery clears the stage when it requeues, so a crash cannot leave a
+        # job claiming the work is nearly done when it has not started.
+        if job.stage == "diarizing":
+            await self._rediarize(session, job, audio)
+            return
+
         # Normalised audio is the checkpoint: a job resumed after a crash skips
         # straight past ffmpeg, and the original upload is already gone by then.
         if audio.is_file():
@@ -525,7 +532,9 @@ class Worker:
             # The diariser reports nothing until it is done, so this stage has a
             # name and no number -- which is still more than a bar that stops.
             await self._enter(session, job, "diarizing")
-            speakers = await self._diarize(session, job, audio, collected)
+            attributed = await self._diarize(session, job, audio, collected)
+            if attributed is not None:
+                speakers = attributed
 
         session.add_all(
             Segment(
@@ -539,22 +548,57 @@ class Worker:
             for index, segment in enumerate(collected)
         )
 
+    async def _rediarize(self, session: AsyncSession, job: Job, audio: Path) -> None:
+        """Attribute words that are already written down.
+
+        Asked for from the archive, on a recording whose transcript exists: the
+        text is the expensive half and the one thing this must not touch, so it
+        is read back rather than fetched again.
+        """
+        if not audio.is_file():
+            raise ApiError(
+                410,
+                "audio_gone",
+                "The recording is no longer on disk, and the diariser needs it.",
+            )
+
+        transcript_id = await session.scalar(
+            select(Transcript.id).where(Transcript.job_id == job.id)
+        )
+        if transcript_id is None:
+            raise ApiError(409, "no_transcript", "This recording has no transcript to attribute.")
+
+        stored = (
+            await session.scalars(
+                select(Segment).where(Segment.transcript_id == transcript_id).order_by(Segment.idx)
+            )
+        ).all()
+        collected = [SttSegment(start=row.start, end=row.end, text=row.text) for row in stored]
+
+        speakers = await self._diarize(session, job, audio, collected)
+        if speakers is None:
+            # The failure is on the job. Whatever attribution was there before
+            # is still true, and wiping it would be the second loss in a row.
+            return
+
+        for row, speaker in zip(stored, speakers, strict=True):
+            row.speaker = speaker
+
     async def _diarize(
         self,
         session: AsyncSession,
         job: Job,
         audio: Path,
         collected: list[SttSegment],
-    ) -> list[str | None]:
+    ) -> list[str | None] | None:
         """Find out who was speaking, and never let the answer cost the text.
 
         A diariser that is down, slow or wrong must not fail a job whose
         transcript already exists: the recording would have to be sent through
         speech-to-text a second time to get back what we are holding. So the
-        failure is recorded on the job and the job still finishes.
+        failure is recorded on the job, the job still finishes, and None says
+        the question went unanswered rather than answered with nobody.
         """
-        nothing: list[str | None] = [None] * len(collected)
-
         try:
             if not self.settings.diarizer_url:
                 raise ApiError(503, "no_diarizer", "No diariser is configured.")
@@ -565,7 +609,7 @@ class Worker:
             job.error_code = failure.code
             job.error_message = failure.message
             job.error_params = json.dumps(failure.params)
-            return nothing
+            return None
 
         labels = assign_speakers([(item.start, item.end) for item in collected], turns)
 

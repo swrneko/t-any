@@ -1,7 +1,7 @@
-import { ArrowLeft, Copy, Loader2, Pencil } from "lucide-react";
+import { ArrowLeft, Copy, Loader2, Pencil, Users } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import {
   api,
@@ -39,6 +39,22 @@ export function TranscriptPage() {
   const [playhead, setPlayhead] = useState(0);
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
+  const [hasDiarizer, setHasDiarizer] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    void api.setupStatus().then((status) => setHasDiarizer(status.has_diarizer));
+  }, []);
+
+  /** The job goes back in the queue, which is the page that answers for it. */
+  const askForSpeakers = async () => {
+    try {
+      await api.diarizeJob(jobId);
+      navigate("/");
+    } catch (cause: unknown) {
+      setError(describe(cause));
+    }
+  };
 
   useEffect(() => {
     Promise.all([api.readJob(jobId), api.readTranscript(jobId)])
@@ -155,6 +171,20 @@ export function TranscriptPage() {
           onTimeUpdate={(event) => setPlayhead(event.currentTarget.currentTime)}
           className="w-full"
         />
+      )}
+
+      {/* Offered only when there is nothing to lose: a recording still on disk,
+          nobody attributed yet, and a diariser to ask. Wanting speakers after
+          reading the transcript is the normal way round, and it used to mean
+          handing the whole recording in a second time. */}
+      {hasDiarizer && job.audio_bytes !== null && transcript.speakers.length === 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" size="sm" onClick={() => void askForSpeakers()}>
+            <Users className="size-4" />
+            {t("transcript.diarize")}
+          </Button>
+          <span className="text-sm text-muted-foreground">{t("transcript.diarizeHint")}</span>
+        </div>
       )}
 
       {transcript.speakers.length > 0 && (

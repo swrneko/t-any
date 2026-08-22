@@ -321,6 +321,9 @@ export const api = {
 
   cancelJob: (id: string) => request<Job>(`/api/jobs/${id}/cancel`, { method: "POST" }),
 
+  /** Ask who was speaking on a recording that is already transcribed. */
+  diarizeJob: (id: string) => request<Job>(`/api/jobs/${id}/diarize`, { method: "POST" }),
+
   /** Everything: the words, the audio, the summaries and the share link. */
   deleteJob: (id: string) => request<void>(`/api/jobs/${id}`, { method: "DELETE" }),
 

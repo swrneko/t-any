@@ -73,6 +73,8 @@
     "language": "Language: {{language}}",
     "timestamps": "Timestamps",
     "speakers": "Speakers:",
+    "diarize": "Find the speakers",
+    "diarizeHint": "Sends the recording to the diariser. The words stay as they are.",
     "rename": "Rename",
     "correct": "Correct this line",
     "corrected": "Corrected — clear the box to restore the original",
@@ -148,7 +150,9 @@
     "webhook_unreachable": "Nothing answered at that address.",
     "webhook_rejected": "The receiver answered {{status}}.",
     "summary_not_cancellable": "That summary is already finished.",
-    "summary_not_retryable": "That summary finished — ask for a new one instead."
+    "summary_not_retryable": "That summary finished — ask for a new one instead.",
+    "audio_gone": "The recording itself is gone; only the words are left",
+    "no_transcript": "This recording has no transcript yet"
   },
   "summary": {
     "title": "Summaries",
