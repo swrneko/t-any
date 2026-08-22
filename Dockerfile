@@ -35,6 +35,11 @@ RUN uv sync --frozen --no-dev
 
 COPY --from=frontend /build/dist ${FRONTEND_DIST}
 
+# Deliberately its own layer, and the last one: yt-dlp ships a release most
+# weeks because sites keep changing, and rebuilding for a newer extractor must
+# not invalidate the dependency install above it.
+RUN uv pip install --python /opt/venv --no-cache yt-dlp
+
 RUN useradd --system --uid 10001 --create-home tany \
     && mkdir -p /data \
     && chown -R tany:tany /data /app

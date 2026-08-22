@@ -18,8 +18,11 @@ DEFAULT_CONTEXT_TOKENS = 8192
 MINIMUM_BUDGET_TOKENS = 256
 
 
-def estimate_tokens(text: str) -> int:
-    return math.ceil(len(text) / CHARS_PER_TOKEN)
+def estimate_tokens(text: str | int) -> int:
+    """How many tokens a string is assumed to cost. Takes a length directly as
+    well, so a caller adding text up can measure without building it first."""
+    length = text if isinstance(text, int) else len(text)
+    return math.ceil(length / CHARS_PER_TOKEN)
 
 
 def input_budget(context_tokens: int, *, prompt_tokens: int) -> int:
@@ -37,17 +40,21 @@ def split_for_budget(segments: list[str], *, budget_tokens: int) -> list[str]:
     """
     parts: list[str] = []
     current: list[str] = []
-    current_tokens = 0
+    current_chars = 0
 
     for segment in segments:
-        cost = estimate_tokens(segment)
+        # Characters, not per-segment token estimates: the space that joins two
+        # segments is a character too, and rounding each segment up separately
+        # measures a string nobody ever sends.
+        cost = len(segment) + (1 if current else 0)
 
-        if current and current_tokens + cost > budget_tokens:
+        if current and estimate_tokens(current_chars + cost) > budget_tokens:
             parts.append(" ".join(current))
-            current, current_tokens = [], 0
+            current, current_chars = [], 0
+            cost = len(segment)
 
         current.append(segment)
-        current_tokens += cost
+        current_chars += cost
 
     if current:
         parts.append(" ".join(current))

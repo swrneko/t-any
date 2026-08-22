@@ -2,6 +2,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -77,6 +78,124 @@ class SttStub:
             transport=httpx.ASGITransport(app=self.app),
             base_url="http://stt.test/v1",
             headers={"Authorization": "Bearer sk-test"},
+        )
+
+
+FAKE_YTDLP = '''#!/usr/bin/env python3
+"""A yt-dlp that never leaves the machine.
+
+It honours the parts of the contract the worker depends on -- the output
+template, the info json beside the media, the thumbnail, the printed path --
+and nothing else. The real binary is a boundary; this proves we speak to it
+correctly, not that it works.
+"""
+import json
+import shutil
+import sys
+from pathlib import Path
+
+argv = sys.argv[1:]
+template = Path(argv[argv.index("-o") + 1])
+base = template.with_name(template.name.removesuffix(".%(ext)s"))
+base.parent.mkdir(parents=True, exist_ok=True)
+
+if EXIT_CODE:
+    sys.stderr.write("ERROR: [youtube] video unavailable\\n")
+    sys.exit(EXIT_CODE)
+
+media = base.with_suffix(".m4a")
+shutil.copyfile(AUDIO, media)
+base.with_suffix(".info.json").write_text(json.dumps(INFO), encoding="utf-8")
+base.with_suffix(".jpg").write_bytes(b"\\xff\\xd8\\xff\\xdb thumbnail")
+print(media)
+'''
+
+
+def write_fake_ytdlp(
+    path: Path, *, audio: Path | None = None, info: dict[str, Any] | None = None, exit_code: int = 0
+) -> Path:
+    """Put a stand-in yt-dlp on disk and return its path."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    source = (
+        FAKE_YTDLP.replace("AUDIO", repr(str(audio)))
+        .replace("INFO", repr(info or {}))
+        .replace("EXIT_CODE", str(exit_code))
+    )
+    path.write_text(source, encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+class MediaStub:
+    """A stand-in for whatever web server a direct link points at.
+
+    A real server rather than a patched client: the worker streams the body in
+    chunks, and only an actual response proves the loop terminates and the
+    bytes arrive in order.
+    """
+
+    def __init__(self, files: dict[str, bytes], redirects: dict[str, str] | None = None) -> None:
+        self.requested: list[str] = []
+        self.app = FastAPI()
+
+        @self.app.get("/{path:path}")
+        async def serve(path: str) -> Response:
+            self.requested.append(f"/{path}")
+            elsewhere = (redirects or {}).get(f"/{path}")
+            if elsewhere is not None:
+                return Response(status_code=302, headers={"Location": elsewhere})
+            body = files.get(f"/{path}")
+            if body is None:
+                return JSONResponse({"detail": "gone"}, status_code=404)
+            return Response(body, media_type="application/octet-stream")
+
+    def http_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app))
+
+
+class DiarizerStub:
+    """A stand-in for the diariser container.
+
+    Its contract is ours, not OpenAI's, which is exactly why it is worth a real
+    server: nothing outside this repository will tell us if the field names
+    drift.
+    """
+
+    def __init__(
+        self,
+        turns: list[dict[str, Any]] | None = None,
+        status: int = 200,
+        envelope: bool = True,
+    ) -> None:
+        one_voice = [{"start": 0.0, "end": 1.4, "speaker": "SPEAKER_00"}]
+        self._turns = one_voice if turns is None else turns
+        self._status = status
+        self._envelope = envelope
+        self.calls: list[RecordedRequest] = []
+        self.app = FastAPI()
+
+        @self.app.post("/diarize")
+        async def diarize(request: Request) -> JSONResponse:
+            async with request.form() as form:
+                upload = form.get("file")
+                recorded = RecordedRequest(
+                    fields={k: v for k, v in form.items() if isinstance(v, str)},
+                    authorization=request.headers.get("Authorization"),
+                )
+                if upload is not None and not isinstance(upload, str):
+                    recorded.filename = upload.filename
+                    recorded.file_size = len(await upload.read())
+            self.calls.append(recorded)
+
+            if self._status >= 400:
+                return JSONResponse({"detail": "no model loaded"}, status_code=self._status)
+            body = {"segments": self._turns} if self._envelope else self._turns
+            return JSONResponse(body)
+
+    def http_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=self.app),
+            base_url="http://diarizer.test",
         )
 
 

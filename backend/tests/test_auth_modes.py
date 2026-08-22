@@ -32,7 +32,11 @@ async def test_disabled_auth_skips_the_setup_wizard(tmp_path: Path) -> None:
     async with running_client(settings) as client:
         status = await client.get("/api/setup/status")
 
-        assert status.json() == {"needs_setup": False, "auth_mode": "disabled"}
+        assert status.json() == {
+            "needs_setup": False,
+            "auth_mode": "disabled",
+            "has_diarizer": False,
+        }
 
 
 async def test_proxy_auth_trusts_the_identity_header(tmp_path: Path) -> None:

@@ -37,7 +37,8 @@ class MediaInfo:
 
 
 async def run(program: str, *args: str) -> tuple[int, bytes, bytes]:
-    """Run an ffmpeg-family tool, returning its exit code, stdout and stderr.
+    """Run an external tool -- ffmpeg, ffprobe, yt-dlp -- and return its exit
+    code, stdout and stderr.
 
     stderr is kept rather than discarded on both paths: ffmpeg's diagnostics are
     the only clue when a container is malformed, and silencedetect reports its

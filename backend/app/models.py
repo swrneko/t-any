@@ -44,6 +44,26 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
+class ApiToken(Base):
+    """A bearer token, so everything the UI does is reachable from a script.
+
+    Stored as a plain SHA-256 of a long random string, not as an argon2 hash:
+    the secret has full entropy already, there is nothing to brute-force, and
+    this one is checked on every single request.
+    """
+
+    __tablename__ = "api_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(sa.String(128))
+    token_hash: Mapped[str] = mapped_column(sa.String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
 class Provider(Base):
     """An OpenAI-compatible endpoint.
 
@@ -77,8 +97,19 @@ class Job(Base):
     source_ref: Mapped[str] = mapped_column(sa.Text)
     title: Mapped[str] = mapped_column(sa.Text)
 
+    # What the extractor knew about the recording. A channel name and a day, not
+    # an instant: yt-dlp reports the upload date with no time and no zone, and
+    # storing it as a timestamp would move it across midnight for half the world.
+    author: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    published_on: Mapped[str | None] = mapped_column(sa.String(10), nullable=True)
+    has_thumbnail: Mapped[bool] = mapped_column(sa.Boolean, default=False)
+
     status: Mapped[str] = mapped_column(sa.String(16), default="queued", index=True)
     progress: Mapped[float] = mapped_column(sa.Float, default=0.0)
+
+    # Asked for per recording, not per instance: diarisation costs minutes of
+    # someone's GPU, and most of what people transcribe has one voice in it.
+    diarize: Mapped[bool] = mapped_column(sa.Boolean, default=False)
 
     language: Mapped[str | None] = mapped_column(sa.String(16), nullable=True)
     prompt: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
@@ -190,6 +221,44 @@ class Summary(Base):
 
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class Share(Base):
+    """A public, read-only link to one transcript.
+
+    One live link per job, not a list of them: a second token is a second thing
+    to remember to revoke, and nobody remembers. The token itself is the secret,
+    so it is long enough not to be guessed and is never derived from the job id.
+    """
+
+    __tablename__ = "shares"
+
+    token: Mapped[str] = mapped_column(sa.String(64), primary_key=True)
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("jobs.id", ondelete="CASCADE"), unique=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class Speaker(Base):
+    """One voice in one recording.
+
+    The label the diariser invented is the identity and never changes; the name
+    a person puts on it lives in one column, so renaming SPEAKER_01 to "Marina"
+    is a single write and every segment, export and share redraws itself.
+    """
+
+    __tablename__ = "speakers"
+
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid7)
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("jobs.id", ondelete="CASCADE"), index=True
+    )
+    label: Mapped[str] = mapped_column(sa.String(64))
+    display_name: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+
+    __table_args__ = (sa.UniqueConstraint("job_id", "label", name="uq_speakers_job_label"),)
 
 
 class Segment(Base):

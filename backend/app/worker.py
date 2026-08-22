@@ -15,10 +15,12 @@ from app.chunking import Chunk, plan_chunks
 from app.config import Settings
 from app.crypto import decrypt_secret
 from app.db import Database
+from app.diarize import DiarizerClient, assign_speakers, diarizer_http_client
 from app.errors import ApiError
 from app.llm import llm_http_client
 from app.media import detect_silences, extract_chunk, normalize_to_opus, probe
-from app.models import Job, Provider, Segment, Summary, Transcript, utcnow
+from app.models import Job, Provider, Segment, Speaker, Summary, Transcript, utcnow
+from app.sources import download_media, ensure_allowed_host, fetch_with_ytdlp
 from app.summary_runner import LlmFactory, SummaryRunner
 from app.stt import SttClient
 from app.stt import Segment as SttSegment
@@ -27,11 +29,16 @@ from app.stt import Transcription, stt_http_client
 log = logging.getLogger("worker")
 
 SttFactory = Callable[[Provider], httpx.AsyncClient]
+DownloadFactory = Callable[[], httpx.AsyncClient]
 
 IDLE_POLL_SECONDS = 2.0
 
 # Failures worth repeating: the connection, not the request.
 RETRYABLE_CODES = frozenset({"stt_unreachable", "stt_server_error"})
+
+# How much of the bar transcription owns when diarisation follows it. The rest
+# is one long call with nothing to report from inside it.
+STT_SHARE_WITH_DIARISATION = 0.9
 
 
 def worker_identity() -> str:
@@ -55,6 +62,9 @@ class Worker:
         *,
         stt_factory: SttFactory | None = None,
         llm_factory: LlmFactory | None = None,
+        download_factory: DownloadFactory | None = None,
+        webhook_factory: DownloadFactory | None = None,
+        diarizer_factory: DownloadFactory | None = None,
     ) -> None:
         self.settings = settings
         self.database = database
@@ -62,6 +72,9 @@ class Worker:
         self.identity = worker_identity()
         self._stt_factory = stt_factory or self._default_stt_client
         self._llm_factory = llm_factory or self._default_llm_client
+        self._download_factory = download_factory or self._default_download_client
+        self._webhook_factory = webhook_factory or (lambda: httpx.AsyncClient())
+        self._diarizer_factory = diarizer_factory or self._default_diarizer_client
 
     def _api_key(self, provider: Provider) -> str | None:
         if not provider.api_key_encrypted:
@@ -73,6 +86,17 @@ class Worker:
 
     def _default_llm_client(self, provider: Provider) -> httpx.AsyncClient:
         return llm_http_client(provider.base_url, self._api_key(provider))
+
+    def _default_diarizer_client(self) -> httpx.AsyncClient:
+        return diarizer_http_client(self.settings.diarizer_url or "")
+
+    def _default_download_client(self) -> httpx.AsyncClient:
+        # No read timeout: the body of a two-hour recording legitimately takes
+        # longer to arrive than any sane per-read deadline.
+        return httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=httpx.Timeout(self.settings.download_connect_seconds, read=None),
+        )
 
     async def recover_stale_jobs(self) -> int:
         """Requeue whatever the previous worker was holding when it died.
@@ -207,12 +231,68 @@ class Worker:
                 job.error_code = failure.code
                 job.error_message = failure.message
                 job.error_params = json.dumps(failure.params)
-            else:
-                job.finished_at = utcnow()
-                await session.commit()
-                return
+
             job.finished_at = utcnow()
             await session.commit()
+            await self._notify(session, job)
+
+    async def _notify(self, session: AsyncSession, job: Job) -> None:
+        """Tell whoever asked to be told, once.
+
+        No retries and no queue: this is a courtesy call, not a delivery
+        guarantee, and the API is still there to be polled. A receiver that is
+        down must never cost us a transcript that already exists.
+        """
+        url = self.settings.webhook_url
+        if not url or job.status not in ("done", "failed"):
+            return
+
+        payload: dict[str, object] = {
+            "event": f"job.{job.status}",
+            "job": {
+                "id": str(job.id),
+                "title": job.title,
+                "source_type": job.source_type,
+                "source_ref": job.source_ref,
+                "status": job.status,
+                "language": job.language,
+                "duration_sec": job.duration_sec,
+                "error_code": job.error_code,
+                # English, and deliberately so: a webhook has no translation
+                # bundle, which is what `message` exists for.
+                "error_message": job.error_message,
+                "created_at": job.created_at.isoformat(),
+                "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+            },
+        }
+        if job.status == "done":
+            payload["text"] = await self._transcript_text(session, job)
+
+        headers = {}
+        if self.settings.webhook_secret:
+            headers["Authorization"] = f"Bearer {self.settings.webhook_secret}"
+
+        try:
+            async with self._webhook_factory() as http:
+                await http.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=self.settings.webhook_timeout_seconds,
+                )
+        except Exception as failure:  # noqa: BLE001 -- a hook must not fail a job
+            log.warning("webhook for job %s was not delivered: %s", job.id, failure)
+
+    async def _transcript_text(self, session: AsyncSession, job: Job) -> str:
+        transcript = await session.scalar(select(Transcript).where(Transcript.job_id == job.id))
+        if transcript is None:
+            return ""
+        rows = await session.scalars(
+            select(Segment).where(Segment.transcript_id == transcript.id).order_by(Segment.idx)
+        )
+        return " ".join(
+            (row.edited_text if row.edited_text is not None else row.text).strip() for row in rows
+        ).strip()
 
     async def _supervise(
         self,
@@ -288,7 +368,7 @@ class Worker:
         if audio.is_file():
             info = await probe(audio)
         else:
-            source = self._find_source(job)
+            source = await self._acquire_source(job)
             info = await normalize_to_opus(source, audio)
             # The original goes the moment we no longer need it. Keeping video
             # around fills a home server's disk inside a week.
@@ -339,7 +419,8 @@ class Worker:
                 if piece is not audio:
                     piece.unlink(missing_ok=True)
 
-                job.progress = (chunk.index + 1) / len(chunks)
+                job.progress = STT_SHARE_WITH_DIARISATION if job.diarize else 1.0
+                job.progress *= (chunk.index + 1) / len(chunks)
                 job.heartbeat_at = utcnow()
                 await session.commit()
 
@@ -350,6 +431,10 @@ class Worker:
         session.add(transcript)
         await session.flush()
 
+        speakers: list[str | None] = [None] * len(collected)
+        if job.diarize:
+            speakers = await self._diarize(session, job, audio, collected)
+
         session.add_all(
             Segment(
                 transcript_id=transcript.id,
@@ -357,9 +442,48 @@ class Worker:
                 start=segment.start,
                 end=segment.end,
                 text=segment.text,
+                speaker=speakers[index],
             )
             for index, segment in enumerate(collected)
         )
+
+    async def _diarize(
+        self,
+        session: AsyncSession,
+        job: Job,
+        audio: Path,
+        collected: list[SttSegment],
+    ) -> list[str | None]:
+        """Find out who was speaking, and never let the answer cost the text.
+
+        A diariser that is down, slow or wrong must not fail a job whose
+        transcript already exists: the recording would have to be sent through
+        speech-to-text a second time to get back what we are holding. So the
+        failure is recorded on the job and the job still finishes.
+        """
+        nothing: list[str | None] = [None] * len(collected)
+
+        try:
+            if not self.settings.diarizer_url:
+                raise ApiError(503, "no_diarizer", "No diariser is configured.")
+            async with self._diarizer_factory() as http:
+                turns = await DiarizerClient(http).diarize(audio)
+        except ApiError as failure:
+            log.warning("diarisation of job %s failed: %s", job.id, failure.message)
+            job.error_code = failure.code
+            job.error_message = failure.message
+            job.error_params = json.dumps(failure.params)
+            return nothing
+
+        labels = assign_speakers([(item.start, item.end) for item in collected], turns)
+
+        # A re-run after a crash finds the previous attempt's names here.
+        await session.execute(delete(Speaker).where(Speaker.job_id == job.id))
+        session.add_all(
+            Speaker(job_id=job.id, label=label)
+            for label in dict.fromkeys(label for label in labels if label)
+        )
+        return labels
 
     async def _transcribe_with_retries(
         self,
@@ -415,6 +539,53 @@ class Worker:
             target=self.settings.chunk_target_seconds,
             hard_max=self.settings.chunk_max_seconds,
         )
+
+    async def _acquire_source(self, job: Job) -> Path:
+        """Put the original media on disk, whatever it took to get there.
+
+        An upload is already here; a link is not. Fetching happens in the worker
+        and never in the request: a two-hour recording would keep an HTTP
+        connection open for the length of the download and lose the job with it.
+        """
+        if job.source_type == "upload":
+            return self._find_source(job)
+
+        workspace = self.settings.tmp_dir / str(job.id)
+        # A crash mid-download leaves a truncated file that looks complete.
+        # Uploads are safe to resume this way; a download is not.
+        for leftover in sorted(workspace.glob("source*")) if workspace.is_dir() else []:
+            leftover.unlink(missing_ok=True)
+
+        allow_private = self.settings.allow_private_network_urls
+
+        if job.source_type == "remote_url":
+            async with self._download_factory() as http:
+                return await download_media(
+                    http,
+                    job.source_ref,
+                    workspace,
+                    self.settings.max_upload_size,
+                    allow_private=allow_private,
+                )
+
+        # Checked again here, not only at submission: the answer a name gives can
+        # change between the two, and the worker is the one that opens the socket.
+        await ensure_allowed_host(job.source_ref, allow_private=allow_private)
+        fetched = await fetch_with_ytdlp(
+            self.settings.ytdlp_bin, job.source_ref, workspace, self.settings.max_upload_size
+        )
+        # The link was standing in for a name until now.
+        job.title = fetched.title or job.title
+        job.author = fetched.author
+        job.published_on = fetched.published_on
+        if fetched.thumbnail is not None:
+            keep = self.settings.media_dir / str(job.id) / "thumbnail.jpg"
+            keep.parent.mkdir(parents=True, exist_ok=True)
+            # A rename, not a copy: tmp and media are two directories on the
+            # one volume the container mounts.
+            fetched.thumbnail.replace(keep)
+            job.has_thumbnail = True
+        return fetched.path
 
     def _find_source(self, job: Job) -> Path:
         workspace = self.settings.tmp_dir / str(job.id)

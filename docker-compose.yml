@@ -33,5 +33,28 @@ services:
       api:
         condition: service_healthy
 
+  # Off unless asked for: docker compose --profile diarize up -d
+  #
+  # Not a published image -- torch and the weights are gigabytes that most
+  # installations never need, and the model is gated behind a Hugging Face
+  # account, so the first build is something you opt into knowingly. Set
+  # HF_TOKEN in .env and accept the terms of pyannote/speaker-diarization-3.1
+  # once with the same account, or the download answers 403.
+  diarizer:
+    profiles: ["diarize"]
+    build: ./diarizer
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 volumes:
   data:
+  models:

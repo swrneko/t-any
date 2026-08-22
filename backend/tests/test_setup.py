@@ -5,7 +5,7 @@ async def test_fresh_install_needs_setup(client: AsyncClient) -> None:
     response = await client.get("/api/setup/status")
 
     assert response.status_code == 200
-    assert response.json() == {"needs_setup": True, "auth_mode": "builtin"}
+    assert response.json() == {"needs_setup": True, "auth_mode": "builtin", "has_diarizer": False}
 
 
 async def test_setup_creates_admin_and_finishes_setup(client: AsyncClient) -> None:
@@ -21,7 +21,7 @@ async def test_setup_creates_admin_and_finishes_setup(client: AsyncClient) -> No
     assert "password" not in body and "password_hash" not in body
 
     status = await client.get("/api/setup/status")
-    assert status.json() == {"needs_setup": False, "auth_mode": "builtin"}
+    assert status.json() == {"needs_setup": False, "auth_mode": "builtin", "has_diarizer": False}
 
 
 async def test_setup_is_rejected_once_an_admin_exists(client: AsyncClient) -> None:
