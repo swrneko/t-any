@@ -128,6 +128,12 @@ class Job(Base):
     # split safely: a filename is allowed to contain a comma.
     parts: Mapped[int] = mapped_column(sa.Integer, default=1, server_default="1")
 
+    # Recordings submitted together but transcribed apart. Named by whoever
+    # submitted them, because the pile is only a pile before the first request:
+    # the server sees one upload at a time and could not tell. A grouping key
+    # and nothing else -- it points at no row and no table.
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid, index=True, nullable=True)
+
     # What the extractor knew about the recording. A channel name and a day, not
     # an instant: yt-dlp reports the upload date with no time and no zone, and
     # storing it as a timestamp would move it across midnight for half the world.

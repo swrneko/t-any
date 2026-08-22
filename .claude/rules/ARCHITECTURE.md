@@ -158,7 +158,12 @@ meeting that arrived split across cards produces one transcript with continuous
 timestamps instead of three to stitch by hand. The home page asks which of the
 two is meant -- one recording, or a pile that becomes either one recording or a
 job each -- and the pile is a list you can reorder, because with everything
-going into one file position is the only thing being chosen. And a job's own
+going into one file position is the only thing being chosen. Both outcomes are
+visible afterwards: a joined recording carries a badge counting the files it
+was made of, and a pile transcribed apart travels under one `batch_id` so the
+archive shows it as the group it arrived in rather than as five adjacent rows
+that look unrelated. The batch is named by the client, since the server sees
+one upload at a time and could not tell they belong together. And a job's own
 page now answers during the work as well as after it: uploading lands on it
 directly, where the stage, the progress and the cancel button live until the
 words replace them.
@@ -198,6 +203,11 @@ Known gaps left deliberately open:
 - A merged recording remembers its parts only as a list of names in
   `source_ref`. Which stretch of the transcript came from which file is not
   recorded, so a part cannot be replaced or re-run on its own.
+- A batch is a label, not a thing. `batch_id` groups rows in the list and
+  nothing else: there is no batch to open, to cancel, or to export, and one
+  whose members are deleted down to one becomes an ordinary row again. The id
+  comes from the browser, so two clients could in principle collide on one --
+  they are UUIDs owned by one account, which makes that a theoretical worry.
 - Diarisation runs after the whole recording is transcribed and reports no
   progress of its own -- the stage says what is happening and never says how
   far it has got. Streaming it would mean chunking two models against each

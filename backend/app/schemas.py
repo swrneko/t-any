@@ -79,6 +79,9 @@ class JobOut(BaseModel):
     # into one recording keep all their names here, and `parts` counts them.
     source_ref: str
     parts: int
+    # Shared by recordings submitted together and transcribed apart, so the
+    # archive can show them as the one pile they arrived in. Null for the rest.
+    batch_id: uuid.UUID | None
     # What the extractor knew: a channel and a calendar day, both absent for an
     # upload. `has_thumbnail` says whether /jobs/{id}/thumbnail has anything.
     author: str | None

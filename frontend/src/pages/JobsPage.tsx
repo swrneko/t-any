@@ -81,10 +81,13 @@ export function JobsPage({ feed }: { feed: JobFeed }) {
 
     // Sequential rather than parallel: the browser would open them all at once
     // and a queue of large files would compete with itself for the uplink.
+    // They travel as separate uploads but under one name, so the archive can
+    // show the pile they were dropped in as rather than five loose rows.
+    const batch = picked.length > 1 ? crypto.randomUUID() : undefined;
     setSent({ done: 0, total: picked.length });
     try {
       for (const [index, file] of picked.entries()) {
-        await api.uploadJob(file, diarize);
+        await api.uploadJob(file, diarize, batch);
         setSent({ done: index + 1, total: picked.length });
       }
       setPicked([]);

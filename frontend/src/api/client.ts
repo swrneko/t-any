@@ -33,6 +33,8 @@ export interface Job {
   source_ref: string;
   /** How many files were joined to make it. One for everything else. */
   parts: number;
+  /** Shared by recordings submitted together and transcribed apart. */
+  batch_id: string | null;
   author: string | null;
   /** A calendar day (YYYY-MM-DD), not an instant: that is all the extractor knows. */
   published_on: string | null;
@@ -299,10 +301,13 @@ export const api = {
 
   /** One recording. Several files make one transcript, joined in the order
    *  they are given -- for a meeting that arrived split across cards. */
-  uploadJob: (files: File | File[], diarize = false) => {
+  uploadJob: (files: File | File[], diarize = false, batch?: string) => {
     const body = new FormData();
     for (const file of Array.isArray(files) ? files : [files]) body.append("file", file);
     body.append("diarize", String(diarize));
+    // Names the pile these files were dropped in as, for the ones that are
+    // transcribed apart. The server cannot see it: it gets one at a time.
+    if (batch) body.append("batch", batch);
     // No Content-Type header: the browser has to set the multipart boundary.
     return request<Job>("/api/jobs", { method: "POST", body });
   },

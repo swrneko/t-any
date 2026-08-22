@@ -9,12 +9,16 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useCodeMessage } from "@/useApiError";
 import { isPending } from "@/useJobFeed";
 
-type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success";
+type BadgeVariant =
+  "default" | "secondary" | "destructive" | "outline" | "success";
 
 const STATUS_VARIANT: Record<JobStatus, BadgeVariant> = {
   queued: "outline",
@@ -37,115 +41,189 @@ interface JobListProps {
 
 /** The same row on both screens: the queue and the archive differ in which jobs
  *  they hold, not in how a job looks. */
-export function JobList({
-  jobs,
+export function JobList(props: JobListProps) {
+  const { t } = useTranslation();
+  const { jobs, selected, onSelect } = props;
+
+  return (
+    <Card className="gap-0 divide-y divide-border overflow-hidden p-0">
+      {blocksOf(jobs).map((block) =>
+        block.batch === null ? (
+          <JobRow key={block.jobs[0].id} job={block.jobs[0]} {...props} />
+        ) : (
+          // Files dropped in together and transcribed apart. Left as loose rows
+          // they read as five unrelated recordings that happen to be adjacent,
+          // which is exactly what they are not.
+          <div
+            key={block.batch}
+            className="border-l-2 border-primary/50 bg-accent/20"
+          >
+            <div className="flex items-center gap-3 px-4 py-2">
+              {onSelect && (
+                <Checkbox
+                  checked={block.jobs.every((job) => selected?.has(job.id))}
+                  aria-label={t("jobs.batch", { count: block.jobs.length })}
+                  onCheckedChange={(picked) =>
+                    block.jobs.forEach((job) =>
+                      onSelect(job.id, picked === true),
+                    )
+                  }
+                />
+              )}
+              <Layers className="size-3.5 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                {t("jobs.batch", { count: block.jobs.length })}
+              </span>
+            </div>
+            <div className="divide-y divide-border border-t border-border">
+              {block.jobs.map((job) => (
+                <JobRow key={job.id} job={job} {...props} />
+              ))}
+            </div>
+          </div>
+        ),
+      )}
+    </Card>
+  );
+}
+
+interface Block {
+  /** Null for a recording that arrived on its own. */
+  batch: string | null;
+  jobs: Job[];
+}
+
+/** Members of a batch collapse onto the position of the first one seen, so the
+ *  order of the list is otherwise untouched -- and a batch whose members were
+ *  deleted down to one is a row again, not a group of one. */
+function blocksOf(jobs: Job[]): Block[] {
+  const blocks: Block[] = [];
+  const held = new Map<string, Block>();
+
+  for (const job of jobs) {
+    const batch = job.batch_id;
+    if (batch === null) {
+      blocks.push({ batch: null, jobs: [job] });
+      continue;
+    }
+    const block = held.get(batch);
+    if (block) {
+      block.jobs.push(job);
+      continue;
+    }
+    const fresh: Block = { batch, jobs: [job] };
+    held.set(batch, fresh);
+    blocks.push(fresh);
+  }
+
+  return blocks.map((block) =>
+    block.jobs.length > 1 ? block : { batch: null, jobs: block.jobs },
+  );
+}
+
+function JobRow({
+  job,
   onCancel,
   selected,
   onSelect,
   onDelete,
   onDropAudio,
-}: JobListProps) {
+}: JobListProps & { job: Job }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const describeCode = useCodeMessage();
 
   return (
-    <Card className="gap-0 overflow-hidden p-0">
-      {jobs.map((job, index) => (
-        <div
-          key={job.id}
-          className={cn(
-            "flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-accent/50",
-            index > 0 && "border-t border-border",
-          )}
-          // Every row, not only the finished ones: the job's own page reports
-          // the work while it happens and the words once it is over.
-          onClick={() => navigate(`/jobs/${job.id}`)}
-        >
-          {onSelect && (
-            <Checkbox
-              checked={selected?.has(job.id) ?? false}
-              aria-label={job.title}
-              onClick={(event: MouseEvent) => event.stopPropagation()}
-              onCheckedChange={(picked) => onSelect(job.id, picked === true)}
-            />
-          )}
+    <div
+      className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-accent/50"
+      // Every row, not only the finished ones: the job's own page reports
+      // the work while it happens and the words once it is over.
+      onClick={() => navigate(`/jobs/${job.id}`)}
+    >
+      {onSelect && (
+        <Checkbox
+          checked={selected?.has(job.id) ?? false}
+          aria-label={job.title}
+          onClick={(event: MouseEvent) => event.stopPropagation()}
+          onCheckedChange={(picked) => onSelect(job.id, picked === true)}
+        />
+      )}
 
-          {job.has_thumbnail && (
-            <img
-              src={api.thumbnailUrl(job.id)}
-              alt=""
-              className="h-10 w-16 shrink-0 rounded-md border border-border object-cover"
-            />
-          )}
+      {job.has_thumbnail && (
+        <img
+          src={api.thumbnailUrl(job.id)}
+          alt=""
+          className="h-10 w-16 shrink-0 rounded-md border border-border object-cover"
+        />
+      )}
 
-          <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-2 truncate font-medium">
-              <span className="truncate">{job.title}</span>
-              {/* A joined recording looks like any other row otherwise, and its
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-2 truncate font-medium">
+          <span className="truncate">{job.title}</span>
+          {/* A joined recording looks like any other row otherwise, and its
                   title only hints at the rest with a "+2". The names it was made
                   of are on the badge, where somebody looking for one can find
                   it without opening the recording. */}
-              {job.parts > 1 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="outline" className="shrink-0 font-normal">
-                      <Layers className="size-3" />
-                      {t("jobs.parts", { total: job.parts })}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>{job.source_ref}</TooltipContent>
-                </Tooltip>
-              )}
-            </p>
-            <p className="truncate text-sm text-muted-foreground">
-              {job.status === "failed"
-                ? describeCode(job.error_code, job.error_params)
-                : // While something is happening, say what: the badge only says
-                  // that the job is running, and a download that reports its
-                  // stage no longer looks like a job that has hung.
-                  job.stage
-                  ? t(`jobs.stage.${job.stage}`)
-                  : formatMeta(job, i18n.language)}
-            </p>
-          </div>
-
-          {job.status === "running" && (
-            <Progress
-              className="w-20"
-              value={job.progress * 100}
-              indeterminate={job.progress === 0}
-            />
+          {job.parts > 1 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="shrink-0 font-normal">
+                  <Layers className="size-3" />
+                  {t("jobs.parts", { total: job.parts })}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>{job.source_ref}</TooltipContent>
+            </Tooltip>
           )}
+        </p>
+        <p className="truncate text-sm text-muted-foreground">
+          {job.status === "failed"
+            ? describeCode(job.error_code, job.error_params)
+            : // While something is happening, say what: the badge only says
+              // that the job is running, and a download that reports its
+              // stage no longer looks like a job that has hung.
+              job.stage
+              ? t(`jobs.stage.${job.stage}`)
+              : formatMeta(job, i18n.language)}
+        </p>
+      </div>
 
-          <Badge variant={STATUS_VARIANT[job.status]}>{t(`jobs.status.${job.status}`)}</Badge>
+      {job.status === "running" && (
+        <Progress
+          className="w-20"
+          value={job.progress * 100}
+          indeterminate={job.progress === 0}
+        />
+      )}
 
-          {onCancel && isPending(job) && job.status !== "cancelling" && (
-            <RowButton
-              label={t("jobs.cancel")}
-              onClick={() => onCancel(job)}
-              icon={<X className="size-4" />}
-            />
-          )}
+      <Badge variant={STATUS_VARIANT[job.status]}>
+        {t(`jobs.status.${job.status}`)}
+      </Badge>
 
-          {onDropAudio && job.audio_bytes !== null && (
-            <RowButton
-              label={t("history.dropAudio")}
-              onClick={() => onDropAudio(job)}
-              icon={<VolumeX className="size-4" />}
-            />
-          )}
+      {onCancel && isPending(job) && job.status !== "cancelling" && (
+        <RowButton
+          label={t("jobs.cancel")}
+          onClick={() => onCancel(job)}
+          icon={<X className="size-4" />}
+        />
+      )}
 
-          {onDelete && (
-            <RowButton
-              label={t("history.delete")}
-              onClick={() => onDelete(job)}
-              icon={<Trash2 className="size-4" />}
-            />
-          )}
-        </div>
-      ))}
-    </Card>
+      {onDropAudio && job.audio_bytes !== null && (
+        <RowButton
+          label={t("history.dropAudio")}
+          onClick={() => onDropAudio(job)}
+          icon={<VolumeX className="size-4" />}
+        />
+      )}
+
+      {onDelete && (
+        <RowButton
+          label={t("history.delete")}
+          onClick={() => onDelete(job)}
+          icon={<Trash2 className="size-4" />}
+        />
+      )}
+    </div>
   );
 }
 
@@ -183,7 +261,8 @@ function RowButton({
 function formatMeta(job: Job, locale: string): string {
   const parts: string[] = [];
   if (job.author) parts.push(job.author);
-  if (job.published_on) parts.push(new Date(job.published_on).toLocaleDateString(locale));
+  if (job.published_on)
+    parts.push(new Date(job.published_on).toLocaleDateString(locale));
 
   if (job.duration_sec === null) {
     parts.push(new Date(job.created_at).toLocaleString(locale));

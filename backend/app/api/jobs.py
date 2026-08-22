@@ -54,6 +54,7 @@ def _present(job: Job, settings: Settings) -> JobOut:
         source_type=job.source_type,
         source_ref=job.source_ref,
         parts=job.parts,
+        batch_id=job.batch_id,
         author=job.author,
         published_on=job.published_on,
         has_thumbnail=job.has_thumbnail,
@@ -103,6 +104,7 @@ async def create_job(
     session: SessionDep,
     settings: SettingsDep,
     diarize: bool = Form(False),
+    batch: uuid.UUID | None = Form(None),
 ) -> JobOut:
     """One recording, out of however many files it arrived in.
 
@@ -110,6 +112,11 @@ async def create_job(
     together produces a single transcript with continuous timestamps, in the
     order they were sent. Sending one file is the same call with a list of one,
     so the wire format did not change for anybody already using it.
+
+    `batch` marks recordings that were submitted together and transcribed
+    apart. It is supplied rather than minted here because one call cannot see
+    the pile the others belong to, and sending a pile in one request would mean
+    a failure halfway through losing the files that had already arrived.
     """
     if not file:
         raise ApiError(422, "no_file", "Send at least one file.")
@@ -122,6 +129,7 @@ async def create_job(
         source_type="upload",
         source_ref=", ".join(names),
         parts=len(names),
+        batch_id=batch,
         title=names[0] if len(names) == 1 else f"{names[0]} +{len(names) - 1}",
         diarize=diarize,
     )

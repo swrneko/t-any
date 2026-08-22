@@ -79,7 +79,9 @@
     "moveUp": "Move up",
     "moveDown": "Move down",
     "remove": "Remove from the list",
-    "parts": "From {{total}} files"
+    "parts": "From {{total}} files",
+    "batch_one": "Uploaded together: {{count}} file",
+    "batch_other": "Uploaded together: {{count}} files"
   },
   "transcript": {
     "back": "To the archive",

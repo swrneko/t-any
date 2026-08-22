@@ -79,7 +79,11 @@
     "moveUp": "Выше",
     "moveDown": "Ниже",
     "remove": "Убрать из списка",
-    "parts": "Из {{total}} файлов"
+    "parts": "Из {{total}} файлов",
+    "batch_one": "Загружены вместе: {{count}} файл",
+    "batch_few": "Загружены вместе: {{count}} файла",
+    "batch_many": "Загружены вместе: {{count}} файлов",
+    "batch_other": "Загружены вместе: {{count}} файлов"
   },
   "transcript": {
     "back": "В историю",

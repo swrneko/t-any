@@ -140,3 +140,37 @@ async def test_a_recording_says_how_many_files_it_was_made_of(
 
     assert (await client.get(f"/api/jobs/{joined['id']}")).json()["parts"] == 2
     assert alone["parts"] == 1
+
+
+async def test_files_sent_separately_can_still_be_one_batch(
+    client: AsyncClient, admin: dict[str, str], sample_audio: Path
+) -> None:
+    """One upload each, but submitted together.
+
+    The archive shows them as a group, so they need something in common; the
+    client names the batch because it is the only party that knows the pile is
+    a pile before the first file has been sent.
+    """
+    await client.post("/api/auth/login", json=admin)
+    batch = "01a02a70-0000-7000-8000-000000000001"
+
+    created = []
+    for name in ("one.wav", "two.wav"):
+        with sample_audio.open("rb") as handle:
+            created.append(
+                (
+                    await client.post(
+                        "/api/jobs",
+                        files={"file": (name, handle, "audio/wav")},
+                        data={"batch": batch},
+                    )
+                ).json()
+            )
+
+    with sample_audio.open("rb") as handle:
+        alone = (
+            await client.post("/api/jobs", files={"file": ("meeting.wav", handle, "audio/wav")})
+        ).json()
+
+    assert [job["batch_id"] for job in created] == [batch, batch]
+    assert alone["batch_id"] is None
