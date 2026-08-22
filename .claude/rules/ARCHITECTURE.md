@@ -33,6 +33,7 @@ them readable in order.
 
 ```
 .
+├── .github/workflows/          ci.yml on every push; release.yml on a v* tag
 ├── Dockerfile                  multi-stage: node builds the SPA, python runs it
 ├── docker-compose.yml          published image; .dev.yml overrides with build
 ├── SPEC.md                     design decisions with rationale (Russian)
@@ -147,6 +148,14 @@ address, a curl that runs, where `/docs` is, and that errors are matched on
 `code` rather than read as prose.
 
 Milestone 7 is complete.
+
+Beside it, the release path SPEC §10 promised and nothing implemented: `ci.yml`
+runs the suite, the typecheck, the frontend build and a no-push image build on
+every push and pull request; `release.yml` publishes `ghcr.io/<repo>` for amd64
+and arm64 when a `v*` tag is pushed, which is what makes the `image:` line in
+`docker-compose.yml` resolve to anything. `latest` follows tags rather than the
+default branch, so a compose file pointing at it never picks up whatever landed
+on main ten minutes ago.
 
 All planned milestones (0 to 6) are complete: auth, the transcription pipeline, chunking on
 silence, live progress over SSE, cancellation that really stops the work,
