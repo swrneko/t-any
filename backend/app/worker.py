@@ -22,6 +22,7 @@ from app.llm import llm_http_client
 from app.media import detect_silences, extract_chunk, normalize_to_opus, probe
 from app.models import Job, Provider, Segment, Speaker, Summary, Transcript, utcnow
 from app.retention import sweep as sweep_expired
+from app.webhooks import read_webhook
 from app.sources import download_media, ensure_allowed_host, fetch_with_ytdlp
 from app.summary_runner import LlmFactory, SummaryRunner
 from app.stt import SttClient
@@ -259,8 +260,12 @@ class Worker:
         guarantee, and the API is still there to be polled. A receiver that is
         down must never cost us a transcript that already exists.
         """
-        url = self.settings.webhook_url
-        if not url or job.status not in ("done", "failed"):
+        if job.status not in ("done", "failed"):
+            return
+        # Read per job rather than at start-up: the address is edited in the UI
+        # while this process is running, and a stale one would be silent.
+        hook = await read_webhook(session, self.secret)
+        if not hook.url:
             return
 
         payload: dict[str, object] = {
@@ -285,13 +290,13 @@ class Worker:
             payload["text"] = await self._transcript_text(session, job)
 
         headers = {}
-        if self.settings.webhook_secret:
-            headers["Authorization"] = f"Bearer {self.settings.webhook_secret}"
+        if hook.secret:
+            headers["Authorization"] = f"Bearer {hook.secret}"
 
         try:
             async with self._webhook_factory() as http:
                 await http.post(
-                    url,
+                    hook.url,
                     json=payload,
                     headers=headers,
                     timeout=self.settings.webhook_timeout_seconds,

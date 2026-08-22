@@ -118,6 +118,12 @@ days, or delete recordings older than M. Both are off until you set a number,
 and the first one is usually the one worth setting — it frees nearly all of
 the space and loses nothing you can read.
 
+Settings → API is where a script gets its bearer token, and where a webhook is
+pointed at whatever should hear about a finished recording. Both live in the
+database, so neither needs a restart; `WEBHOOK_URL` in `.env` only seeds the
+first one. A test call sends the receiver a sample so you can find a typo
+without transcribing anything.
+
 ## Security notes
 
 Read these before exposing the service to the internet.

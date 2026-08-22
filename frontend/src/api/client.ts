@@ -183,6 +183,18 @@ export interface ProviderDraft {
   is_default: boolean;
 }
 
+/** Where a finished job is announced. The secret comes back masked. */
+export interface Webhook {
+  url: string | null;
+  secret: string | null;
+}
+
+export interface WebhookTest {
+  delivered: boolean;
+  status: number | null;
+  error_code: string | null;
+}
+
 /** How long things are kept. Null means forever, and that is the default. */
 export interface Retention {
   audio_days: number | null;
@@ -392,6 +404,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
     }),
+
+  readWebhook: () => request<Webhook>("/api/settings/webhook"),
+
+  /** An absent secret keeps the stored one; "" clears it. */
+  writeWebhook: (url: string | null, secret?: string) =>
+    request<Webhook>("/api/settings/webhook", {
+      method: "PUT",
+      body: JSON.stringify(secret === undefined ? { url } : { url, secret }),
+    }),
+
+  testWebhook: () => request<WebhookTest>("/api/settings/webhook/test", { method: "POST" }),
 
   readRetention: () => request<Retention>("/api/settings/retention"),
 

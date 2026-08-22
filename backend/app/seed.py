@@ -3,7 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.crypto import encrypt_secret
-from app.models import Preset, Provider
+from app.models import InstanceSetting, Preset, Provider
+from app.webhooks import WEBHOOK_KEY, Webhook, write_webhook
 from app.presets import BUILTIN_PRESETS
 
 
@@ -78,3 +79,20 @@ async def seed_providers(session: AsyncSession, settings: Settings, secret: byte
         )
 
     await session.commit()
+
+
+async def seed_webhook(session: AsyncSession, settings: Settings, secret: bytes) -> None:
+    """Copy WEBHOOK_URL into the database once, the way a provider is copied.
+
+    After that the stored value rules: an operator who changes the receiver in
+    the UI must not have it silently reverted by an environment variable
+    nobody remembered was still set.
+    """
+    if not settings.webhook_url:
+        return
+    if await session.get(InstanceSetting, WEBHOOK_KEY) is not None:
+        return
+
+    await write_webhook(
+        session, secret, Webhook(url=settings.webhook_url, secret=settings.webhook_secret)
+    )

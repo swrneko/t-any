@@ -109,6 +109,31 @@ class Retention(BaseModel):
     job_days: int | None = Field(default=None, ge=1)
 
 
+class WebhookIn(BaseModel):
+    """The address to announce a finished job to.
+
+    The secret follows the same rule as a provider key: absent leaves the
+    stored one alone, an empty string clears it, anything else replaces it.
+    """
+
+    url: str | None = None
+    secret: str | None = None
+
+
+class WebhookOut(BaseModel):
+    url: str | None
+    # Masked, always. The full secret leaves this process only towards the
+    # receiver that is meant to check it.
+    secret: str | None
+
+
+class WebhookTestOut(BaseModel):
+    delivered: bool
+    status: int | None = None
+    # A receiver that is down is an answer, not a failed request.
+    error_code: str | None = None
+
+
 class StorageOut(BaseModel):
     audio_bytes: int
     # Thumbnails, and whatever else a recording keeps beside its audio.

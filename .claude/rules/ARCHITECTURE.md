@@ -59,6 +59,7 @@ them readable in order.
 │   │   ├── probe.py            asks an endpoint for /v1/models; the API's only
 │   │   │                       outbound call
 │   │   ├── retention.py        removing a recording, by hand or by policy
+│   │   ├── webhooks.py         the stored address a finished job is announced to
 │   │   ├── stt.py              OpenAI transcription protocol client
 │   │   ├── llm.py              OpenAI chat protocol client, plain and streamed
 │   │   ├── diarize.py          the diariser's own protocol, and the overlap merge
@@ -138,7 +139,14 @@ on the hour beside its claim loop. And accounts, which `owner_id` had been
 waiting for since the first migration: an administrator creates them, hands out
 a password when somebody forgets theirs, and cannot leave the instance without
 an administrator or delete somebody's recordings without being told how many
-there are. The API section is what is left.
+there are. Last, the API section: the webhook moved out of the environment into
+the database, gained a test call so "did I type the address right" no longer
+costs a whole transcription to answer, and sits beside a documentation block
+that says the four things the generated schema cannot -- this instance's own
+address, a curl that runs, where `/docs` is, and that errors are matched on
+`code` rather than read as prose.
+
+Milestone 7 is complete.
 
 All planned milestones (0 to 6) are complete: auth, the transcription pipeline, chunking on
 silence, live progress over SSE, cancellation that really stops the work,
@@ -192,7 +200,8 @@ Known gaps left deliberately open:
   current correction, nothing between them. Who changed what, and when, is not
   recorded -- an instance with two people editing one transcript would want it.
 - The webhook fires once and is never retried. A receiver that was down when a
-  job finished has to poll the API to catch up.
+  job finished has to poll the API to catch up; the test call proves the
+  address, not that a real delivery will land.
 - Search ranks by bm25 over segments, so a recording that says the word twice
   outranks nothing in particular. Grouping hits by job is done in the UI.
 - A share link exposes the audio as well as the text. That is deliberate -- a

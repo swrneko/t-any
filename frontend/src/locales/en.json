@@ -137,7 +137,10 @@
     "last_admin": "This is the only administrator left — promote somebody else first.",
     "cannot_delete_self": "You cannot delete your own account.",
     "user_has_jobs": "This account still holds recordings.",
-    "accounts_are_external": "Accounts come from outside this service in this mode."
+    "accounts_are_external": "Accounts come from outside this service in this mode.",
+    "no_webhook": "There is no address to call yet.",
+    "webhook_unreachable": "Nothing answered at that address.",
+    "webhook_rejected": "The receiver answered {{status}}."
   },
   "summary": {
     "title": "Summaries",
@@ -306,6 +309,21 @@
       "delete": "Delete account",
       "confirm": "{{name}} loses access to this instance.",
       "confirmWithJobs": "{{name}} holds {{n}} recordings. Deleting the account deletes those too, with their transcripts and audio."
+    },
+    "api": {
+      "webhook": "Webhook",
+      "webhookHint": "Called once when a recording finishes, with the job and its text. It is a courtesy call: there are no retries, and the API is still there to be polled.",
+      "webhookUrl": "Address",
+      "webhookSecret": "Shared secret",
+      "secretHint": "Sent as a bearer token, so the receiver can tell a real call from a stray one.",
+      "noSecret": "No secret",
+      "clearSecret": "Remove the stored secret",
+      "sendTest": "Send a test call",
+      "delivered": "delivered, answered {{status}}",
+      "docs": "Using the API from a script",
+      "baseUrl": "This instance answers at",
+      "errors": "Errors carry a stable code and its parameters; the message is an English fallback for curl and webhooks, not text meant for a person. Match on the code.",
+      "openapi": "Open the generated reference"
     }
   },
   "history": {

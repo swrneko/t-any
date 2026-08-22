@@ -115,7 +115,7 @@ function Workspace({
           <Route path="appearance" element={<AppearanceSection />} />
           <Route path="providers" element={<ProvidersSection isAdmin={user.is_admin} />} />
           <Route path="presets" element={<PresetsPage />} />
-          <Route path="api" element={<ApiSection />} />
+          <Route path="api" element={<ApiSection isAdmin={user.is_admin} />} />
         </Route>
 
         {/* The two addresses that moved. A bookmark is not a reason to keep a

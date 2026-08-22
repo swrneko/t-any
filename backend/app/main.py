@@ -25,7 +25,7 @@ from app.db import Database
 from app.errors import register_error_handlers
 from app.migrator import upgrade_to_head
 from app.secrets import load_or_create_secret
-from app.seed import seed_builtin_presets, seed_providers
+from app.seed import seed_builtin_presets, seed_providers, seed_webhook
 from app.sessions import SessionSigner
 from app.static import mount_frontend, mount_share_preview
 
@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     async with app.state.db.session_factory() as session:
         await seed_providers(session, settings, app.state.secret)
+        await seed_webhook(session, settings, app.state.secret)
         await seed_builtin_presets(session)
 
     try:
