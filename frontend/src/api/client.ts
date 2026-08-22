@@ -29,6 +29,8 @@ export interface Job {
   /** A calendar day (YYYY-MM-DD), not an instant: that is all the extractor knows. */
   published_on: string | null;
   has_thumbnail: boolean;
+  /** What the recording still costs on disk; null once only the words are left. */
+  audio_bytes: number | null;
   diarize: boolean;
   status: JobStatus;
   progress: number;
@@ -286,6 +288,18 @@ export const api = {
     }),
 
   cancelJob: (id: string) => request<Job>(`/api/jobs/${id}/cancel`, { method: "POST" }),
+
+  /** Everything: the words, the audio, the summaries and the share link. */
+  deleteJob: (id: string) => request<void>(`/api/jobs/${id}`, { method: "DELETE" }),
+
+  /** The recording only. The transcript stays, and its player goes quiet. */
+  deleteJobAudio: (id: string) => request<void>(`/api/jobs/${id}/audio`, { method: "DELETE" }),
+
+  deleteJobs: (ids: string[], audioOnly = false) =>
+    request<{ deleted: number; skipped: number }>("/api/jobs/delete", {
+      method: "POST",
+      body: JSON.stringify({ ids, audio_only: audioOnly }),
+    }),
 
   audioUrl: (id: string) => `/api/jobs/${id}/audio`,
 

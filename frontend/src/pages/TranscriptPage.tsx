@@ -139,14 +139,20 @@ export function TranscriptPage() {
         </div>
       </div>
 
-      <audio
-        ref={player}
-        controls
-        preload="metadata"
-        src={api.audioUrl(job.id)}
-        onTimeUpdate={(event) => setPlayhead(event.currentTarget.currentTime)}
-        className="w-full"
-      />
+      {/* A player with nothing to play reads as a broken page, so the recording
+          having been freed is said in words instead. */}
+      {job.audio_bytes === null ? (
+        <p className="text-sm text-muted-foreground">{t("transcript.audioGone")}</p>
+      ) : (
+        <audio
+          ref={player}
+          controls
+          preload="metadata"
+          src={api.audioUrl(job.id)}
+          onTimeUpdate={(event) => setPlayhead(event.currentTarget.currentTime)}
+          className="w-full"
+        />
+      )}
 
       {transcript.speakers.length > 0 && (
         <SpeakerBar
@@ -311,7 +317,9 @@ function BackLink() {
   const { t } = useTranslation();
   return (
     <Button asChild variant="ghost" size="sm" className="justify-self-start">
-      <Link to="/">
+      {/* Back to where transcripts live, which is the archive rather than the
+          upload screen this one may have been opened from. */}
+      <Link to="/history">
         <ArrowLeft className="size-4" />
         {t("transcript.back")}
       </Link>

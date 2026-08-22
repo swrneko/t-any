@@ -1,6 +1,7 @@
 import asyncio
 import json
 import secrets
+import shutil
 import uuid
 from collections.abc import AsyncIterator, Mapping
 from datetime import timedelta
@@ -17,6 +18,8 @@ from app.exports import FORMATS, MEDIA_TYPES, Options, lines_from, render
 from app.models import Job, Segment, Share, Speaker, Transcript, User, utcnow
 from app.schemas import (
     JobOut,
+    JobsDeleteIn,
+    JobsDeleteOut,
     JobUrlIn,
     SegmentIn,
     SegmentOut,
@@ -31,9 +34,21 @@ from app.storage import save_upload
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
+AUDIO_NAME = "audio.ogg"
 
-def _present(job: Job) -> JobOut:
+
+def _audio_bytes(settings: Settings, job_id: uuid.UUID) -> int | None:
+    """One stat per job, like the file it describes: cheap enough for the SSE
+    tick, and always the truth rather than a column that can drift from disk."""
+    try:
+        return (settings.media_dir / str(job_id) / AUDIO_NAME).stat().st_size
+    except OSError:
+        return None
+
+
+def _present(job: Job, settings: Settings) -> JobOut:
     return JobOut(
+        audio_bytes=_audio_bytes(settings, job.id),
         id=job.id,
         title=job.title,
         source_type=job.source_type,
@@ -104,7 +119,7 @@ async def create_job(
     _, job.sha256 = await save_upload(file, source, settings.max_upload_size)
 
     await session.commit()
-    return _present(job)
+    return _present(job, settings)
 
 
 @router.post("/url", status_code=201)
@@ -134,15 +149,17 @@ async def create_job_from_url(
     )
     session.add(job)
     await session.commit()
-    return _present(job)
+    return _present(job, settings)
 
 
 @router.get("")
-async def list_jobs(user: CurrentUserDep, session: SessionDep) -> list[JobOut]:
+async def list_jobs(
+    user: CurrentUserDep, session: SessionDep, settings: SettingsDep
+) -> list[JobOut]:
     jobs = await session.scalars(
         select(Job).where(Job.owner_id == user.id).order_by(Job.created_at.desc())
     )
-    return [_present(job) for job in jobs]
+    return [_present(job, settings) for job in jobs]
 
 
 TERMINAL_STATUSES = frozenset({"done", "failed", "cancelled"})
@@ -178,7 +195,9 @@ async def job_list_events(
                     )
                 ).all()
 
-            payload = json.dumps([json.loads(_present(job).model_dump_json()) for job in jobs])
+            payload = json.dumps(
+                [json.loads(_present(job, settings).model_dump_json()) for job in jobs]
+            )
             if payload != previous:
                 previous = payload
                 yield _sse(payload)
@@ -196,8 +215,10 @@ async def job_list_events(
 
 
 @router.get("/{job_id}")
-async def read_job(job_id: uuid.UUID, user: CurrentUserDep, session: SessionDep) -> JobOut:
-    return _present(await _owned_job(session, user, job_id))
+async def read_job(
+    job_id: uuid.UUID, user: CurrentUserDep, session: SessionDep, settings: SettingsDep
+) -> JobOut:
+    return _present(await _owned_job(session, user, job_id), settings)
 
 
 @router.get("/{job_id}/events")
@@ -225,7 +246,7 @@ async def job_events(
             if job is None:
                 return
 
-            payload = _present(job).model_dump_json()
+            payload = _present(job, settings).model_dump_json()
             if payload != previous:
                 previous = payload
                 yield _sse(payload)
@@ -248,7 +269,7 @@ async def job_audio(
 ) -> FileResponse:
     job = await _owned_job(session, user, job_id)
 
-    audio = settings.media_dir / str(job.id) / "audio.ogg"
+    audio = settings.media_dir / str(job.id) / AUDIO_NAME
     if not audio.is_file():
         raise ApiError(404, "audio_unavailable", "The audio for this job is gone.")
 
@@ -382,7 +403,9 @@ async def revoke_share(job_id: uuid.UUID, user: CurrentUserDep, session: Session
 
 
 @router.post("/{job_id}/cancel")
-async def cancel_job(job_id: uuid.UUID, user: CurrentUserDep, session: SessionDep) -> JobOut:
+async def cancel_job(
+    job_id: uuid.UUID, user: CurrentUserDep, session: SessionDep, settings: SettingsDep
+) -> JobOut:
     job = await _owned_job(session, user, job_id)
 
     if job.status == "queued":
@@ -400,7 +423,101 @@ async def cancel_job(job_id: uuid.UUID, user: CurrentUserDep, session: SessionDe
         )
 
     await session.commit()
-    return _present(job)
+    return _present(job, settings)
+
+
+def _require_finished(job: Job) -> None:
+    """A recording still being worked on is not deleted, it is cancelled first.
+
+    The worker owns the directory while it runs, and removing it underneath
+    would leave ffmpeg writing into nothing and the job failing for a reason
+    nobody could explain.
+    """
+    if job.status not in TERMINAL_STATUSES:
+        raise ApiError(
+            409,
+            "job_not_finished",
+            "Cancel it before deleting it.",
+            status=job.status,
+        )
+
+
+async def _forget(session: SessionDep, job: Job) -> None:
+    """Drop the rows. Everything else falls with them by cascade."""
+    # Segments go explicitly: the search index is kept by triggers on that
+    # table, and SQLite does not fire them for rows removed by a foreign key
+    # cascade. A recording that still answered searches would look deleted
+    # without being deleted.
+    await session.execute(
+        delete(Segment).where(
+            Segment.transcript_id.in_(select(Transcript.id).where(Transcript.job_id == job.id))
+        )
+    )
+    await session.delete(job)
+
+
+def _remove_media(settings: Settings, job_id: uuid.UUID) -> None:
+    shutil.rmtree(settings.media_dir / str(job_id), ignore_errors=True)
+
+
+def _remove_audio(settings: Settings, job_id: uuid.UUID) -> None:
+    (settings.media_dir / str(job_id) / AUDIO_NAME).unlink(missing_ok=True)
+
+
+@router.delete("/{job_id}", status_code=204)
+async def delete_job(
+    job_id: uuid.UUID, user: CurrentUserDep, session: SessionDep, settings: SettingsDep
+) -> None:
+    job = await _owned_job(session, user, job_id)
+    _require_finished(job)
+
+    await _forget(session, job)
+    # Rows first, files second: a directory nobody points at is litter, while a
+    # row pointing at files that are gone is a transcript that cannot play.
+    await session.commit()
+    _remove_media(settings, job_id)
+
+
+@router.delete("/{job_id}/audio", status_code=204)
+async def delete_job_audio(
+    job_id: uuid.UUID, user: CurrentUserDep, session: SessionDep, settings: SettingsDep
+) -> None:
+    """Free the expensive half and keep the valuable one."""
+    job = await _owned_job(session, user, job_id)
+    _require_finished(job)
+    _remove_audio(settings, job.id)
+
+
+@router.post("/delete")
+async def delete_jobs(
+    body: JobsDeleteIn, user: CurrentUserDep, session: SessionDep, settings: SettingsDep
+) -> JobsDeleteOut:
+    """The same two operations, over a selection.
+
+    Deleting a hundred recordings one request at a time is not a thing anybody
+    should be asked to wait through.
+    """
+    jobs = (
+        await session.scalars(
+            select(Job).where(Job.id.in_(body.ids), Job.owner_id == user.id)
+        )
+    ).all()
+
+    doomed = [job for job in jobs if job.status in TERMINAL_STATUSES]
+    skipped = len(body.ids) - len(doomed)
+
+    if not body.audio_only:
+        for job in doomed:
+            await _forget(session, job)
+    await session.commit()
+
+    for job in doomed:
+        if body.audio_only:
+            _remove_audio(settings, job.id)
+        else:
+            _remove_media(settings, job.id)
+
+    return JobsDeleteOut(deleted=len(doomed), skipped=skipped)
 
 
 async def speakers_of(session: SessionDep, job: Job) -> list[Speaker]:

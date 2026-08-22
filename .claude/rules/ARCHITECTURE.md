@@ -125,8 +125,13 @@ archive; and providers, which are now written from the UI behind a real admin
 gate (`ADMIN_USERS` names administrators whatever the database says, because
 behind a proxy nothing else can), with one default per kind enforced by a
 partial unique index and a connection test that reports what `/v1/models`
-answered. Deletion and retention, then users, then the API section come next,
-in that order.
+answered. And deletion: a recording can be removed whole, or reduced to its
+words alone -- an hour of audio is tens of megabytes and the transcript of it
+is tens of kilobytes, so freeing the first while keeping the second is the
+operation that actually matters. Rows go before files, segments go explicitly
+so the search index follows, and a recording still being worked on is refused
+rather than pulled out from under the worker. Retention policies, then users,
+then the API section come next, in that order.
 
 All planned milestones (0 to 6) are complete: auth, the transcription pipeline, chunking on
 silence, live progress over SSE, cancellation that really stops the work,
@@ -159,6 +164,11 @@ Known gaps left deliberately open:
 - The token estimate is characters divided by three, not a tokeniser. It is
   deliberately pessimistic, so it splits earlier than strictly necessary.
 
+- Deletion is confirmed, never undone. There is no `deleted_at`, so nothing can
+  be brought back; the alternative would put a filter in every query and leave
+  files to sweep later, which is more machinery than a rare operation deserves.
+- Nothing removes anything on its own yet. Disk grows until somebody presses a
+  button, and how much each recording costs is only visible per row.
 - The connection test asks `/v1/models`, which is part of the OpenAI surface
   but not universal: a server that does not implement it looks unreachable
   while working perfectly. The wording in the UI says so; nothing else can.

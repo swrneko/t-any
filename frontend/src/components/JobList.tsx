@@ -1,5 +1,5 @@
-import { X } from "lucide-react";
-import type { MouseEvent } from "react";
+import { Trash2, VolumeX, X } from "lucide-react";
+import type { MouseEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
@@ -7,6 +7,7 @@ import { api, type Job, type JobStatus } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -24,10 +25,26 @@ const STATUS_VARIANT: Record<JobStatus, BadgeVariant> = {
   failed: "destructive",
 };
 
+interface JobListProps {
+  jobs: Job[];
+  onCancel?: (job: Job) => void;
+  /** Selection is offered only where bulk actions are: the archive. */
+  selected?: ReadonlySet<string>;
+  onSelect?: (id: string, picked: boolean) => void;
+  onDelete?: (job: Job) => void;
+  onDropAudio?: (job: Job) => void;
+}
+
 /** The same row on both screens: the queue and the archive differ in which jobs
- *  they hold, not in how a job looks. Cancelling is offered only where it can
- *  still do something. */
-export function JobList({ jobs, onCancel }: { jobs: Job[]; onCancel?: (job: Job) => void }) {
+ *  they hold, not in how a job looks. */
+export function JobList({
+  jobs,
+  onCancel,
+  selected,
+  onSelect,
+  onDelete,
+  onDropAudio,
+}: JobListProps) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const describeCode = useCodeMessage();
@@ -46,6 +63,15 @@ export function JobList({ jobs, onCancel }: { jobs: Job[]; onCancel?: (job: Job)
             if (job.status === "done") navigate(`/jobs/${job.id}`);
           }}
         >
+          {onSelect && (
+            <Checkbox
+              checked={selected?.has(job.id) ?? false}
+              aria-label={job.title}
+              onClick={(event: MouseEvent) => event.stopPropagation()}
+              onCheckedChange={(picked) => onSelect(job.id, picked === true)}
+            />
+          )}
+
           {job.has_thumbnail && (
             <img
               src={api.thumbnailUrl(job.id)}
@@ -74,26 +100,60 @@ export function JobList({ jobs, onCancel }: { jobs: Job[]; onCancel?: (job: Job)
           <Badge variant={STATUS_VARIANT[job.status]}>{t(`jobs.status.${job.status}`)}</Badge>
 
           {onCancel && isPending(job) && job.status !== "cancelling" && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t("jobs.cancel")}
-                  onClick={(event: MouseEvent) => {
-                    event.stopPropagation();
-                    onCancel(job);
-                  }}
-                >
-                  <X className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t("jobs.cancel")}</TooltipContent>
-            </Tooltip>
+            <RowButton
+              label={t("jobs.cancel")}
+              onClick={() => onCancel(job)}
+              icon={<X className="size-4" />}
+            />
+          )}
+
+          {onDropAudio && job.audio_bytes !== null && (
+            <RowButton
+              label={t("history.dropAudio")}
+              onClick={() => onDropAudio(job)}
+              icon={<VolumeX className="size-4" />}
+            />
+          )}
+
+          {onDelete && (
+            <RowButton
+              label={t("history.delete")}
+              onClick={() => onDelete(job)}
+              icon={<Trash2 className="size-4" />}
+            />
           )}
         </div>
       ))}
     </Card>
+  );
+}
+
+function RowButton({
+  label,
+  icon,
+  onClick,
+}: {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={label}
+          onClick={(event: MouseEvent) => {
+            event.stopPropagation();
+            onClick();
+          }}
+        >
+          {icon}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -112,5 +172,12 @@ function formatMeta(job: Job, locale: string): string {
     parts.push(`${minutes}:${String(seconds).padStart(2, "0")}`);
   }
 
+  if (job.audio_bytes !== null) parts.push(formatBytes(job.audio_bytes));
+
   return parts.join(" · ");
+}
+
+export function formatBytes(bytes: number): string {
+  const mb = bytes / 1024 ** 2;
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.max(1, Math.round(mb))} MB`;
 }

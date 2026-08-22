@@ -96,6 +96,12 @@ tar czf tany-backup.tgz -C /var/lib/docker/volumes/tany_data/_data .
 docker compose start
 ```
 
+Space is freed from the archive page, one recording at a time or by selection.
+Deleting a recording takes its transcript, summaries and share link with it;
+dropping only the audio keeps every word and every export, and leaves the
+player silent. The audio is almost all of the size and almost none of the
+value, so that second option is usually the one you want.
+
 ## Security notes
 
 Read these before exposing the service to the internet.

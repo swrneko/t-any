@@ -82,6 +82,8 @@ class JobOut(BaseModel):
     author: str | None
     published_on: str | None
     has_thumbnail: bool
+    # What the recording still costs on disk, and null once it is only words.
+    audio_bytes: int | None
     diarize: bool
     status: str
     progress: float
@@ -92,6 +94,20 @@ class JobOut(BaseModel):
     error_params: dict[str, Any]
     created_at: datetime
     finished_at: datetime | None
+
+
+class JobsDeleteIn(BaseModel):
+    ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
+    # The audio alone: an hour of it is tens of megabytes, the words are tens
+    # of kilobytes, and only one of the two is worth keeping forever.
+    audio_only: bool = False
+
+
+class JobsDeleteOut(BaseModel):
+    deleted: int
+    # Said out loud rather than folded into the count: a recording still being
+    # worked on is left alone, and silence about that reads as success.
+    skipped: int
 
 
 class SegmentOut(BaseModel):
