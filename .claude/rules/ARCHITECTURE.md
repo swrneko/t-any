@@ -70,8 +70,8 @@ them readable in order.
 │   │   ├── presets.py          the built-in prompts
 │   │   ├── worker.py           claim loop; also the worker entrypoint
 │   │   └── api/                health, setup, auth, jobs, providers, presets,
-│   │                           summaries, search, tokens, settings (retention
-│   │                           and disk usage), public (no session)
+│   │                           summaries, search, tokens, users, settings
+│   │                           (retention and disk usage), public (no session)
 │   ├── migrations/             alembic
 │   └── tests/                  pytest, async, real HTTP through ASGITransport
 │       └── stubs.py            stand-in STT server (a stub, never a patch)
@@ -134,7 +134,11 @@ operation that actually matters. Rows go before files, segments go explicitly
 so the search index follows, and a recording still being worked on is refused
 rather than pulled out from under the worker. Retention rides on top of that
 same code: two policies, both off until a number is set, applied by the worker
-on the hour beside its claim loop. Users, then the API section, come next.
+on the hour beside its claim loop. And accounts, which `owner_id` had been
+waiting for since the first migration: an administrator creates them, hands out
+a password when somebody forgets theirs, and cannot leave the instance without
+an administrator or delete somebody's recordings without being told how many
+there are. The API section is what is left.
 
 All planned milestones (0 to 6) are complete: auth, the transcription pipeline, chunking on
 silence, live progress over SSE, cancellation that really stops the work,

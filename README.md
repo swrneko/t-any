@@ -85,6 +85,17 @@ says. Set it whenever `AUTH_MODE=proxy`: identities arriving from a proxy have
 no admin flag, so without it nobody can edit providers or manage accounts. In
 `builtin` mode it doubles as the way back in when the only password is lost.
 
+## Accounts
+
+There is no open registration: an administrator creates accounts in
+Settings → Accounts, and each one gets its own private archive — recordings,
+presets and summaries are never shared between them. Everybody can change their
+own password there; an administrator can hand out a new one, which is what
+forgetting a password actually looks like.
+
+Deleting an account is refused while it still holds recordings, and says how
+many. Confirming takes them with it, audio included.
+
 ## Data and backups
 
 Everything lives in one volume: the SQLite database, the normalised audio, and

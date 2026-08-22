@@ -13,6 +13,11 @@ export interface User {
   is_admin: boolean;
 }
 
+/** A person, and what deleting them would take with them. */
+export interface UserRow extends User {
+  jobs: number;
+}
+
 export type JobStatus = "queued" | "running" | "cancelling" | "cancelled" | "done" | "failed";
 
 export const TERMINAL_STATUSES: readonly JobStatus[] = ["done", "failed", "cancelled"];
@@ -366,6 +371,27 @@ export const api = {
     request<CreatedApiToken>("/api/tokens", { method: "POST", body: JSON.stringify({ name }) }),
 
   revokeToken: (id: string) => request<void>(`/api/tokens/${id}`, { method: "DELETE" }),
+
+  listUsers: () => request<UserRow[]>("/api/users"),
+
+  createUser: (username: string, password: string, isAdmin = false) =>
+    request<User>("/api/users", {
+      method: "POST",
+      body: JSON.stringify({ username, password, is_admin: isAdmin }),
+    }),
+
+  updateUser: (id: string, changes: { is_admin?: boolean; password?: string }) =>
+    request<User>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(changes) }),
+
+  /** Refused while they still hold recordings, unless withJobs says otherwise. */
+  deleteUser: (id: string, withJobs = false) =>
+    request<void>(`/api/users/${id}?with_jobs=${withJobs}`, { method: "DELETE" }),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>("/api/auth/password", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
 
   readRetention: () => request<Retention>("/api/settings/retention"),
 

@@ -1,4 +1,4 @@
-import { HardDrive, KeyRound, Palette, Server, Sparkles } from "lucide-react";
+import { HardDrive, KeyRound, Palette, Server, Sparkles, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const SECTIONS = [
+  { path: "users", Icon: Users, adminOnly: false },
   { path: "storage", Icon: HardDrive, adminOnly: true },
   { path: "appearance", Icon: Palette, adminOnly: false },
   { path: "providers", Icon: Server, adminOnly: false },

@@ -295,3 +295,25 @@ class SummaryIn(BaseModel):
 class Credentials(BaseModel):
     username: str = Field(min_length=3, max_length=64, pattern=USERNAME_PATTERN)
     password: str = Field(min_length=8, max_length=128)
+
+
+class UserCreateIn(Credentials):
+    is_admin: bool = False
+
+
+class UserPatch(BaseModel):
+    """Both fields are an administrator's doing: a promotion, or a password
+    handed out because somebody forgot theirs."""
+
+    is_admin: bool | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=128)
+
+
+class UserRowOut(UserOut):
+    # What deleting this person would take with them.
+    jobs: int
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)

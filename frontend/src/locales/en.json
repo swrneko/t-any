@@ -131,7 +131,13 @@
     "provider_rejected": "The endpoint answered {{status}} — usually a missing or wrong key.",
     "provider_not_openai": "Something answered, but not like an OpenAI-compatible server.",
     "probe_without_target": "There is no address to test yet.",
-    "job_not_finished": "Cancel it before deleting it."
+    "job_not_finished": "Cancel it before deleting it.",
+    "user_not_found": "No such account.",
+    "username_taken": "Somebody already has that name.",
+    "last_admin": "This is the only administrator left — promote somebody else first.",
+    "cannot_delete_self": "You cannot delete your own account.",
+    "user_has_jobs": "This account still holds recordings.",
+    "accounts_are_external": "Accounts come from outside this service in this mode."
   },
   "summary": {
     "title": "Summaries",
@@ -235,7 +241,8 @@
       "providers": "Providers",
       "presets": "Presets",
       "api": "API",
-      "storage": "Storage"
+      "storage": "Storage",
+      "users": "Accounts"
     },
     "appearance": {
       "dates": "Dates follow the interface language, not the browser's."
@@ -281,6 +288,24 @@
       "keep": "Keep forever",
       "saved": "Saved",
       "warning": "Recordings finished more than {{days}} days ago will be deleted, and nothing can bring them back."
+    },
+    "users": {
+      "explanation": "Who can sign in here, and what they hold.",
+      "external": "Identity comes from your reverse proxy in this mode. Accounts appear here when their owner first signs in; passwords are not ours to change.",
+      "myAccount": "My account",
+      "currentPassword": "Current password",
+      "newPassword": "New password",
+      "changePassword": "Change password",
+      "everyone": "Everyone",
+      "new": "Add account",
+      "you": "you",
+      "admin": "Administrator",
+      "holds": "Recordings: {{n}}",
+      "resetPassword": "Set a new password",
+      "resetFor": "A new password for {{name}}. Tell it to them; it is not shown again.",
+      "delete": "Delete account",
+      "confirm": "{{name}} loses access to this instance.",
+      "confirmWithJobs": "{{name}} holds {{n}} recordings. Deleting the account deletes those too, with their transcripts and audio."
     }
   },
   "history": {

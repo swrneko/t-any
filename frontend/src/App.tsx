@@ -16,6 +16,7 @@ import { ApiSection } from "@/pages/settings/ApiSection";
 import { AppearanceSection } from "@/pages/settings/AppearanceSection";
 import { ProvidersSection } from "@/pages/settings/ProvidersSection";
 import { StorageSection } from "@/pages/settings/StorageSection";
+import { UsersSection } from "@/pages/settings/UsersSection";
 import { useJobFeed } from "@/useJobFeed";
 
 export default function App() {
@@ -103,7 +104,8 @@ function Workspace({
         <Route path="/jobs/:jobId" element={<TranscriptPage />} />
 
         <Route path="/settings" element={<SettingsPage isAdmin={user.is_admin} />}>
-          <Route index element={<Navigate to="appearance" replace />} />
+          <Route index element={<Navigate to="users" replace />} />
+          <Route path="users" element={<UsersSection me={user} authMode={authMode} />} />
           {/* Registered either way: hiding the link is how it is hidden, and a
               typed address should land somewhere rather than nowhere. */}
           <Route
