@@ -1,40 +1,44 @@
-import CloseIcon from "@mui/icons-material/Close";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
+import { UploadCloud, X } from "lucide-react";
 import {
-  Alert,
-  Box,
-  Chip,
-  IconButton,
-  LinearProgress,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
-  Paper,
-  Stack,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-import { useCallback, useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type FormEvent,
+  type MouseEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
-import { api, TERMINAL_STATUSES, type Job, type JobStatus } from "../api/client";
-import { useApiErrorMessage, useCodeMessage } from "../useApiError";
+import { api, TERMINAL_STATUSES, type Job, type JobStatus } from "@/api/client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { useApiErrorMessage, useCodeMessage } from "@/useApiError";
 
-const STATUS_COLOR: Record<JobStatus, "default" | "info" | "success" | "error"> = {
-  queued: "default",
-  running: "info",
-  cancelling: "default",
-  cancelled: "default",
+type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success";
+
+const STATUS_VARIANT: Record<JobStatus, BadgeVariant> = {
+  queued: "outline",
+  running: "default",
+  cancelling: "outline",
+  cancelled: "secondary",
   done: "success",
-  failed: "error",
+  failed: "destructive",
 };
 
 const isPending = (job: Job) => !TERMINAL_STATUSES.includes(job.status);
 
 export function JobsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const describe = useApiErrorMessage();
   const describeCode = useCodeMessage();
@@ -42,8 +46,13 @@ export function JobsPage() {
 
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [url, setUrl] = useState("");
+  const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasProvider, setHasProvider] = useState(true);
+  const [hasDiarizer, setHasDiarizer] = useState(false);
+  const [diarize, setDiarize] = useState(false);
 
   const refresh = useCallback(async () => {
     setJobs(await api.listJobs());
@@ -54,6 +63,7 @@ export function JobsPage() {
     void api
       .listProviders()
       .then((providers) => setHasProvider(providers.some((p) => p.kind === "stt")));
+    void api.setupStatus().then((status) => setHasDiarizer(status.has_diarizer));
   }, [refresh]);
 
   // Reopened whenever work starts: the server ends the stream once everything
@@ -68,12 +78,27 @@ export function JobsPage() {
     setUploading(file.name);
     setError(null);
     try {
-      await api.uploadJob(file);
+      await api.uploadJob(file, diarize);
       await refresh();
     } catch (cause) {
       setError(describe(cause));
     } finally {
       setUploading(null);
+    }
+  };
+
+  const addUrl = async (event: FormEvent) => {
+    event.preventDefault();
+    setAdding(true);
+    setError(null);
+    try {
+      await api.addUrlJob(url.trim(), diarize);
+      setUrl("");
+      await refresh();
+    } catch (cause) {
+      setError(describe(cause));
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -89,39 +114,46 @@ export function JobsPage() {
 
   const onDrop = (event: DragEvent) => {
     event.preventDefault();
+    setDragging(false);
     const file = event.dataTransfer.files[0];
     if (file) void upload(file);
   };
 
   return (
-    <Stack spacing={3}>
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        {t("jobs.title")}
-      </Typography>
+    <div className="grid gap-6">
+      <h1 className="text-2xl font-semibold tracking-tight">{t("jobs.title")}</h1>
 
-      {!hasProvider && <Alert severity="warning">{t("jobs.noProvider")}</Alert>}
-      {error && <Alert severity="error">{error}</Alert>}
+      {!hasProvider && (
+        <Alert variant="warning">
+          <AlertDescription>{t("jobs.noProvider")}</AlertDescription>
+        </Alert>
+      )}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-      <Paper
-        elevation={0}
+      <button
+        type="button"
         onClick={() => input.current?.click()}
         onDrop={onDrop}
-        onDragOver={(event) => event.preventDefault()}
-        sx={{
-          p: 5,
-          borderRadius: 6,
-          border: "2px dashed",
-          borderColor: "divider",
-          textAlign: "center",
-          cursor: "pointer",
-          "&:hover": { borderColor: "primary.main" },
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragging(true);
         }}
+        onDragLeave={() => setDragging(false)}
+        className={cn(
+          "grid place-items-center gap-3 rounded-xl border-2 border-dashed border-border bg-card/40 px-6 py-12 text-center transition-colors outline-none",
+          "hover:border-primary/60 hover:bg-accent/40 focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          dragging && "border-primary bg-accent/60",
+        )}
       >
-        <UploadFileIcon sx={{ fontSize: 40, opacity: 0.6 }} />
-        <Typography color="text.secondary" sx={{ mt: 1 }}>
+        <UploadCloud className="size-9 text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">
           {uploading ? t("jobs.uploading", { name: uploading }) : t("jobs.drop")}
-        </Typography>
-        {uploading && <LinearProgress sx={{ mt: 2, borderRadius: 1 }} />}
+        </span>
+        {uploading && <Progress className="w-56" indeterminate />}
         <input
           ref={input}
           type="file"
@@ -133,72 +165,116 @@ export function JobsPage() {
             event.target.value = "";
           }}
         />
-      </Paper>
+      </button>
+
+      <form onSubmit={addUrl} className="flex gap-2">
+        <Input
+          type="url"
+          inputMode="url"
+          value={url}
+          aria-label={t("jobs.urlLabel")}
+          placeholder={t("jobs.urlPlaceholder")}
+          onChange={(event) => setUrl(event.target.value)}
+        />
+        <Button type="submit" disabled={adding || url.trim() === ""}>
+          {t("jobs.addUrl")}
+        </Button>
+      </form>
+
+      {/* Applies to whichever of the two above is used next: the choice belongs
+          to the recording, and both routes end in the same pipeline. */}
+      {hasDiarizer && (
+        <div className="flex items-center gap-3">
+          <Switch id="diarize" checked={diarize} onCheckedChange={setDiarize} />
+          <Label htmlFor="diarize" className="text-sm font-normal">
+            {t("jobs.diarize")}
+          </Label>
+          <span className="text-sm text-muted-foreground">{t("jobs.diarizeHint")}</span>
+        </div>
+      )}
 
       {jobs && jobs.length === 0 && (
-        <Typography color="text.secondary">{t("jobs.empty")}</Typography>
+        <p className="text-sm text-muted-foreground">{t("jobs.empty")}</p>
       )}
 
       {jobs && jobs.length > 0 && (
-        <Paper elevation={0} sx={{ borderRadius: 6, overflow: "hidden" }}>
-          <List disablePadding>
-            {jobs.map((job) => (
-              <ListItem
-                key={job.id}
-                divider
-                disablePadding
-                secondaryAction={
-                  <Stack direction="row" sx={{ alignItems: "center", gap: 1 }}>
-                    {job.status === "running" && (
-                      <Box sx={{ width: 80 }}>
-                        <LinearProgress
-                          variant={job.progress > 0 ? "determinate" : "indeterminate"}
-                          value={job.progress * 100}
-                          sx={{ borderRadius: 1 }}
-                        />
-                      </Box>
-                    )}
-                    <Chip
-                      size="small"
-                      label={t(`jobs.status.${job.status}`)}
-                      color={STATUS_COLOR[job.status]}
-                    />
-                    {isPending(job) && job.status !== "cancelling" && (
-                      <Tooltip title={t("jobs.cancel")}>
-                        <IconButton size="small" onClick={(event) => void cancel(event, job)}>
-                          <CloseIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Stack>
-                }
-              >
-                <ListItemButton
-                  onClick={() => navigate(`/jobs/${job.id}`)}
-                  disabled={job.status !== "done"}
-                  sx={{ py: 1.5, pr: 24 }}
-                >
-                  <ListItemText
-                    primary={job.title}
-                    secondary={
-                      job.status === "failed"
-                        ? describeCode(job.error_code, job.error_params)
-                        : formatMeta(job)
-                    }
-                  />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-        </Paper>
+        <Card className="gap-0 overflow-hidden p-0">
+          {jobs.map((job, index) => (
+            <div
+              key={job.id}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3",
+                index > 0 && "border-t border-border",
+                job.status === "done" && "cursor-pointer hover:bg-accent/50",
+              )}
+              onClick={() => {
+                if (job.status === "done") navigate(`/jobs/${job.id}`);
+              }}
+            >
+              {job.has_thumbnail && (
+                <img
+                  src={api.thumbnailUrl(job.id)}
+                  alt=""
+                  className="h-10 w-16 shrink-0 rounded-md border border-border object-cover"
+                />
+              )}
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{job.title}</p>
+                <p className="truncate text-sm text-muted-foreground">
+                  {job.status === "failed"
+                    ? describeCode(job.error_code, job.error_params)
+                    : formatMeta(job, i18n.language)}
+                </p>
+              </div>
+
+              {job.status === "running" && (
+                <Progress
+                  className="w-20"
+                  value={job.progress * 100}
+                  indeterminate={job.progress === 0}
+                />
+              )}
+
+              <Badge variant={STATUS_VARIANT[job.status]}>{t(`jobs.status.${job.status}`)}</Badge>
+
+              {isPending(job) && job.status !== "cancelling" && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t("jobs.cancel")}
+                      onClick={(event) => void cancel(event, job)}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("jobs.cancel")}</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          ))}
+        </Card>
       )}
-    </Stack>
+    </div>
   );
 }
 
-function formatMeta(job: Job): string {
-  if (job.duration_sec === null) return new Date(job.created_at).toLocaleString();
-  const minutes = Math.floor(job.duration_sec / 60);
-  const seconds = Math.round(job.duration_sec % 60);
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+/** Dates follow the chosen language, not the browser's: someone reading the app
+ *  in Russian should not be shown 5/14/2026. */
+function formatMeta(job: Job, locale: string): string {
+  const parts: string[] = [];
+  if (job.author) parts.push(job.author);
+  if (job.published_on) parts.push(new Date(job.published_on).toLocaleDateString(locale));
+
+  if (job.duration_sec === null) {
+    parts.push(new Date(job.created_at).toLocaleString(locale));
+  } else {
+    const minutes = Math.floor(job.duration_sec / 60);
+    const seconds = Math.round(job.duration_sec % 60);
+    parts.push(`${minutes}:${String(seconds).padStart(2, "0")}`);
+  }
+
+  return parts.join(" · ");
 }

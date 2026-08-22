@@ -1,10 +1,13 @@
-import { Alert, Button, Stack, TextField } from "@mui/material";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api, type User } from "../api/client";
-import { AuthLayout } from "../components/AuthLayout";
-import { useApiErrorMessage } from "../useApiError";
+import { api, type User } from "@/api/client";
+import { AuthLayout } from "@/components/AuthLayout";
+import { Field } from "@/components/Field";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useApiErrorMessage } from "@/useApiError";
 
 export function LoginPage({ onLoggedIn }: { onLoggedIn: (user: User) => void }) {
   const { t } = useTranslation();
@@ -30,30 +33,43 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: (user: User) => void }) 
 
   return (
     <AuthLayout title={t("login.title")} subtitle={t("app.tagline")}>
-      <Stack component="form" spacing={2} onSubmit={submit}>
-        {error && <Alert severity="error">{error}</Alert>}
+      <form className="grid gap-4" onSubmit={submit}>
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-        <TextField
-          label={t("login.username")}
-          value={username}
-          onChange={(event) => setUsername(event.target.value)}
-          autoComplete="username"
-          autoFocus
-          required
-        />
-        <TextField
-          label={t("login.password")}
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          autoComplete="current-password"
-          required
-        />
+        <Field label={t("login.username")}>
+          {(id) => (
+            <Input
+              id={id}
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              autoComplete="username"
+              autoFocus
+              required
+            />
+          )}
+        </Field>
 
-        <Button type="submit" variant="contained" size="large" disabled={busy}>
+        <Field label={t("login.password")}>
+          {(id) => (
+            <Input
+              id={id}
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          )}
+        </Field>
+
+        <Button type="submit" size="lg" className="mt-2" disabled={busy}>
           {t("login.submit")}
         </Button>
-      </Stack>
+      </form>
     </AuthLayout>
   );
 }

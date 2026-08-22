@@ -3,6 +3,8 @@ export type AuthMode = "builtin" | "proxy" | "disabled";
 export interface SetupStatus {
   needs_setup: boolean;
   auth_mode: AuthMode;
+  /** Whether the diariser container is running, so the option is worth offering. */
+  has_diarizer: boolean;
 }
 
 export interface User {
@@ -15,10 +17,19 @@ export type JobStatus = "queued" | "running" | "cancelling" | "cancelled" | "don
 
 export const TERMINAL_STATUSES: readonly JobStatus[] = ["done", "failed", "cancelled"];
 
+export type JobSource = "upload" | "remote_url" | "ytdlp";
+
 export interface Job {
   id: string;
   title: string;
-  source_type: string;
+  source_type: JobSource;
+  /** The uploaded filename, or the link the job was created from. */
+  source_ref: string;
+  author: string | null;
+  /** A calendar day (YYYY-MM-DD), not an instant: that is all the extractor knows. */
+  published_on: string | null;
+  has_thumbnail: boolean;
+  diarize: boolean;
   status: JobStatus;
   progress: number;
   language: string | null;
@@ -34,7 +45,16 @@ export interface TranscriptSegment {
   start: number;
   end: number;
   text: string;
+  /** Whether `text` is a correction. The provider's own words are still there. */
+  edited: boolean;
+  /** The diariser's label. What it is called on screen lives in `speakers`. */
   speaker: string | null;
+}
+
+export interface Speaker {
+  id: string;
+  label: string;
+  display_name: string | null;
 }
 
 export interface Transcript {
@@ -42,6 +62,7 @@ export interface Transcript {
   language: string | null;
   text: string;
   segments: TranscriptSegment[];
+  speakers: Speaker[];
 }
 
 export interface Preset {
@@ -75,6 +96,59 @@ export interface Summary {
   error_params: Record<string, unknown>;
   created_at: string;
   finished_at: string | null;
+}
+
+export type ExportFormat = "txt" | "md" | "srt" | "vtt" | "json";
+
+export interface ExportOptions {
+  timestamps?: boolean;
+  speakers?: boolean;
+  download?: boolean;
+}
+
+export interface Share {
+  token: string;
+  job_id: string;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export interface SearchHit {
+  job_id: string;
+  job_title: string;
+  idx: number;
+  start: number;
+  /** The matched words arrive wrapped in \x02 and \x03, never in markup. */
+  excerpt: string;
+}
+
+export const MARK_START = "\u0002";
+export const MARK_END = "\u0003";
+
+export interface ApiTokenSummary {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+/** Only ever returned by the call that created it. */
+export interface CreatedApiToken extends ApiTokenSummary {
+  token: string;
+}
+
+export interface SharedTranscript {
+  job_id: string;
+  title: string;
+  author: string | null;
+  published_on: string | null;
+  language: string | null;
+  duration_sec: number | null;
+  has_audio: boolean;
+  text: string;
+  segments: TranscriptSegment[];
+  /** Read-only: a reader sees the names, and cannot change them. */
+  speakers: { label: string; display_name: string | null }[];
 }
 
 export interface Provider {
@@ -130,6 +204,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+function exportQuery(format: ExportFormat, options: ExportOptions): string {
+  const query = new URLSearchParams({ format });
+  if (options.timestamps) query.set("timestamps", "true");
+  if (options.speakers === false) query.set("speakers", "false");
+  if (options.download) query.set("download", "true");
+  return query.toString();
+}
+
 export const api = {
   setupStatus: () => request<SetupStatus>("/api/setup/status"),
 
@@ -155,16 +237,36 @@ export const api = {
 
   readTranscript: (id: string) => request<Transcript>(`/api/jobs/${id}/transcript`),
 
-  uploadJob: (file: File) => {
+  uploadJob: (file: File, diarize = false) => {
     const body = new FormData();
     body.append("file", file);
+    body.append("diarize", String(diarize));
     // No Content-Type header: the browser has to set the multipart boundary.
     return request<Job>("/api/jobs", { method: "POST", body });
   },
 
+  /** Queue a link. The download happens in the worker, so this returns at once. */
+  addUrlJob: (url: string, diarize = false) =>
+    request<Job>("/api/jobs/url", { method: "POST", body: JSON.stringify({ url, diarize }) }),
+
+  /** Blank text restores what the provider heard; the original is never lost. */
+  correctSegment: (jobId: string, idx: number, text: string) =>
+    request<TranscriptSegment>(`/api/jobs/${jobId}/segments/${idx}`, {
+      method: "PATCH",
+      body: JSON.stringify({ text }),
+    }),
+
+  renameSpeaker: (jobId: string, speakerId: string, displayName: string) =>
+    request<Speaker>(`/api/jobs/${jobId}/speakers/${speakerId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ display_name: displayName }),
+    }),
+
   cancelJob: (id: string) => request<Job>(`/api/jobs/${id}/cancel`, { method: "POST" }),
 
   audioUrl: (id: string) => `/api/jobs/${id}/audio`,
+
+  thumbnailUrl: (id: string) => `/api/jobs/${id}/thumbnail`,
 
   /** Live job list. One connection for every job, not one per job: browsers cap
    * concurrent requests per origin, and a queue of ten would starve. */
@@ -176,6 +278,45 @@ export const api = {
     source.onerror = () => source.close();
     return () => source.close();
   },
+
+  exportUrl: (jobId: string, format: ExportFormat, options: ExportOptions = {}) =>
+    `/api/jobs/${jobId}/export?${exportQuery(format, options)}`,
+
+  /** The same render the download gives, as a string, for the clipboard. */
+  readExport: async (jobId: string, format: ExportFormat, options: ExportOptions = {}) => {
+    const response = await fetch(api.exportUrl(jobId, format, options), {
+      credentials: "same-origin",
+    });
+    if (!response.ok) throw new ApiError("unknown", response.status);
+    return response.text();
+  },
+
+  search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
+
+  createShare: (jobId: string, expiresInDays: number | null = null) =>
+    request<Share>(`/api/jobs/${jobId}/share`, {
+      method: "POST",
+      body: JSON.stringify({ expires_in_days: expiresInDays }),
+    }),
+
+  readShare: (jobId: string) => request<Share>(`/api/jobs/${jobId}/share`),
+
+  revokeShare: (jobId: string) => request<void>(`/api/jobs/${jobId}/share`, { method: "DELETE" }),
+
+  readSharedTranscript: (token: string) =>
+    request<SharedTranscript>(`/api/public/shares/${token}`),
+
+  sharedAudioUrl: (token: string) => `/api/public/shares/${token}/audio`,
+
+  sharedExportUrl: (token: string, format: ExportFormat, options: ExportOptions = {}) =>
+    `/api/public/shares/${token}/export?${exportQuery(format, options)}`,
+
+  listTokens: () => request<ApiTokenSummary[]>("/api/tokens"),
+
+  createToken: (name: string) =>
+    request<CreatedApiToken>("/api/tokens", { method: "POST", body: JSON.stringify({ name }) }),
+
+  revokeToken: (id: string) => request<void>(`/api/tokens/${id}`, { method: "DELETE" }),
 
   listProviders: () => request<Provider[]>("/api/providers"),
 

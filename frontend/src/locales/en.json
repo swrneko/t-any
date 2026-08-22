@@ -8,6 +8,12 @@
     "en": "English",
     "ru": "Русский"
   },
+  "theme": {
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
   "setup": {
     "title": "Create the first administrator",
     "subtitle": "This account owns the instance. There is no open registration.",
@@ -33,7 +39,7 @@
   },
   "jobs": {
     "title": "Transcripts",
-    "empty": "Nothing here yet. Drop in an audio or video file to start.",
+    "empty": "Nothing here yet. Drop in a file or paste a link to start.",
     "drop": "Drop a file here, or click to choose one",
     "uploading": "Uploading {{name}}…",
     "noProvider": "No speech-to-text server is configured, so transcription will fail. Set STT_BASE_URL and restart.",
@@ -45,14 +51,23 @@
       "cancelling": "Stopping",
       "cancelled": "Cancelled"
     },
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "urlLabel": "Link to a recording",
+    "urlPlaceholder": "https://www.youtube.com/watch?v=…",
+    "addUrl": "Add link",
+    "diarize": "Identify speakers",
+    "diarizeHint": "Slower, and only worth it for a conversation."
   },
   "transcript": {
     "back": "All transcripts",
     "copy": "Copy text",
     "copied": "Copied",
     "language": "Language: {{language}}",
-    "timestamps": "Timestamps"
+    "timestamps": "Timestamps",
+    "speakers": "Speakers:",
+    "rename": "Rename",
+    "correct": "Correct this line",
+    "corrected": "Corrected — clear the box to restore the original"
   },
   "errors": {
     "setup_already_completed": "Setup has already been completed. Ask an administrator for an account.",
@@ -88,7 +103,24 @@
     "llm_unreachable": "Cannot reach the language model at {{base_url}}",
     "llm_rejected_request": "The language model answered {{status}}",
     "llm_server_error": "The language model answered {{status}}",
-    "llm_empty_reply": "The model returned nothing"
+    "llm_empty_reply": "The model returned nothing",
+    "invalid_url": "That is not an http or https link",
+    "download_failed": "The server answered {{status}} for that link",
+    "download_unreachable": "That link could not be reached",
+    "download_too_large": "That recording is too large",
+    "ytdlp_failed": "yt-dlp could not fetch that link — it may be private, region locked or unsupported",
+    "thumbnail_unavailable": "This transcript has no cover image",
+    "url_not_allowed": "That link points inside the server's own network",
+    "unsupported_format": "That export format does not exist",
+    "share_not_found": "This link does not exist",
+    "share_expired": "This link has expired",
+    "session_required": "Sign in to manage API tokens",
+    "token_not_found": "That token no longer exists",
+    "no_diarizer": "Speaker identification is not available on this instance.",
+    "diarizer_unreachable": "Cannot reach the diariser. The transcript is complete; only the speakers are missing.",
+    "diarizer_failed": "The diariser refused the recording. The transcript is complete; only the speakers are missing.",
+    "speaker_not_found": "No such speaker in this recording.",
+    "segment_not_found": "That line is no longer part of this transcript."
   },
   "summary": {
     "title": "Summaries",
@@ -101,6 +133,7 @@
     "new": "New preset",
     "edit": "Edit preset",
     "duplicate": "Copy and edit",
+    "delete": "Delete",
     "copyOf": "{{name}} (copy)",
     "builtinTag": "Built in",
     "name": "Name",
@@ -136,6 +169,56 @@
         "name": "Blank",
         "description": "A starting point for your own instructions"
       }
+    }
+  },
+  "search": {
+    "title": "Search",
+    "label": "Search transcripts",
+    "placeholder": "A word somebody said…",
+    "nothing": "Nothing in the archive matches “{{query}}”."
+  },
+  "export": {
+    "title": "Export",
+    "timestamps": "With timestamps",
+    "speakers": "With speakers",
+    "copy": "Copy",
+    "download": "Download",
+    "formats": {
+      "txt": "Plain text",
+      "md": "Markdown",
+      "srt": "SubRip (.srt)",
+      "vtt": "WebVTT (.vtt)",
+      "json": "Raw JSON"
+    }
+  },
+  "share": {
+    "title": "Share",
+    "explanation": "Anyone with the link can read this transcript. Nothing else on this instance is reachable through it.",
+    "lifetime": "Link lives",
+    "lifetimes": {
+      "forever": "Until I revoke it",
+      "7": "7 days",
+      "30": "30 days"
+    },
+    "create": "Create link",
+    "copy": "Copy link",
+    "revoke": "Revoke link",
+    "noExpiry": "This link does not expire.",
+    "expiresOn": "Expires on {{date}}."
+  },
+  "settings": {
+    "title": "Settings",
+    "tokens": {
+      "explanation": "API tokens let a script do everything this interface can.",
+      "name": "What is it for",
+      "namePlaceholder": "My backup script",
+      "create": "Create token",
+      "shownOnce": "Copy it now — this is the only time it is shown.",
+      "copy": "Copy token",
+      "empty": "No tokens yet.",
+      "revoke": "Revoke",
+      "lastUsed": "Last used {{date}}",
+      "neverUsed": "Never used"
     }
   }
 }

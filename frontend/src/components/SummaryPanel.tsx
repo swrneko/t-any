@@ -1,25 +1,23 @@
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  IconButton,
-  LinearProgress,
-  MenuItem,
-  Paper,
-  Stack,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { Copy, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api, TERMINAL_STATUSES, type Preset, type Summary } from "../api/client";
-import { useApiErrorMessage, useCodeMessage } from "../useApiError";
-import { usePresetLabel } from "../usePresetLabel";
+import { api, TERMINAL_STATUSES, type Preset, type Summary } from "@/api/client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useApiErrorMessage, useCodeMessage } from "@/useApiError";
+import { usePresetLabel } from "@/usePresetLabel";
 
 export function SummaryPanel({ jobId }: { jobId: string }) {
   const { t } = useTranslation();
@@ -82,98 +80,106 @@ export function SummaryPanel({ jobId }: { jobId: string }) {
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const selected = presets.find((preset) => preset.id === chosen);
+
   return (
-    <Stack spacing={2}>
-      <Typography variant="h6" sx={{ fontWeight: 700 }}>
-        {t("summary.title")}
-      </Typography>
+    <div className="grid gap-4">
+      <h2 className="text-lg font-semibold tracking-tight">{t("summary.title")}</h2>
 
-      {error && <Alert severity="error">{error}</Alert>}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-      <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start", flexWrap: "wrap" }}>
-        <TextField
-          select
-          size="small"
-          label={t("summary.preset")}
-          value={chosen}
-          onChange={(event) => setChosen(event.target.value)}
-          sx={{ minWidth: 260 }}
-          helperText={presets.find((preset) => preset.id === chosen)?.builtin_key
-            ? label(presets.find((preset) => preset.id === chosen)!).description
-            : " "}
-        >
-          {presets.map((preset) => (
-            <MenuItem key={preset.id} value={preset.id}>
-              {label(preset).name}
-            </MenuItem>
-          ))}
-        </TextField>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="grid min-w-64 gap-2">
+          <Label htmlFor="summary-preset">{t("summary.preset")}</Label>
+          <Select value={chosen} onValueChange={setChosen}>
+            <SelectTrigger id="summary-preset" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {presets.map((preset) => (
+                <SelectItem key={preset.id} value={preset.id}>
+                  {label(preset).name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <Button
-          variant="contained"
-          startIcon={<AutoAwesomeIcon />}
-          onClick={() => void summarise()}
-          disabled={!chosen}
-          sx={{ mt: 0.5 }}
-        >
+        <Button onClick={() => void summarise()} disabled={!chosen}>
+          <Sparkles className="size-4" />
           {t("summary.run")}
         </Button>
-      </Stack>
+      </div>
+
+      {selected && (
+        <p className="-mt-2 text-xs text-muted-foreground">{label(selected).description}</p>
+      )}
 
       {summaries.length === 0 && (
-        <Typography color="text.secondary">{t("summary.empty")}</Typography>
+        <p className="text-sm text-muted-foreground">{t("summary.empty")}</p>
       )}
 
       {summaries.map((summary) => (
-        <Paper key={summary.id} elevation={0} sx={{ p: 3, borderRadius: 6 }}>
-          <Stack
-            direction="row"
-            sx={{ alignItems: "center", justifyContent: "space-between", gap: 1, mb: 1 }}
-          >
-            <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-              <Typography sx={{ fontWeight: 600 }}>{summary.preset_name}</Typography>
-              {summary.model_used && <Chip size="small" label={summary.model_used} />}
-              {!TERMINAL_STATUSES.includes(summary.status) && (
-                <Chip size="small" color="info" label={t(`jobs.status.${summary.status}`)} />
+        <Card key={summary.id} className="gap-3 p-5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">{summary.preset_name}</span>
+              {summary.model_used && (
+                <Badge variant="outline" className="font-mono">
+                  {summary.model_used}
+                </Badge>
               )}
-            </Stack>
+              {!TERMINAL_STATUSES.includes(summary.status) && (
+                <Badge>{t(`jobs.status.${summary.status}`)}</Badge>
+              )}
+              {copied === summary.id && (
+                <span className="text-xs text-muted-foreground">{t("transcript.copied")}</span>
+              )}
+            </div>
 
-            <Stack direction="row" sx={{ gap: 0.5 }}>
-              <IconButton size="small" onClick={() => void copy(summary)}>
-                <ContentCopyIcon fontSize="small" />
-              </IconButton>
-              <IconButton size="small" onClick={() => void remove(summary)}>
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-            </Stack>
-          </Stack>
-
-          {copied === summary.id && (
-            <Typography variant="caption" color="success.main">
-              {t("transcript.copied")}
-            </Typography>
-          )}
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("transcript.copy")}
+                onClick={() => void copy(summary)}
+              >
+                <Copy className="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("presets.delete")}
+                onClick={() => void remove(summary)}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+          </div>
 
           {summary.status === "failed" ? (
-            <Alert severity="error">
-              {describeCode(summary.error_code, summary.error_params)}
+            <Alert variant="destructive">
+              <AlertDescription>
+                {describeCode(summary.error_code, summary.error_params)}
+              </AlertDescription>
             </Alert>
           ) : (
             <>
               {!TERMINAL_STATUSES.includes(summary.status) && (
-                <LinearProgress
-                  variant={summary.progress > 0 ? "determinate" : "indeterminate"}
+                <Progress
                   value={summary.progress * 100}
-                  sx={{ mb: 1, borderRadius: 1 }}
+                  indeterminate={summary.progress === 0}
                 />
               )}
-              <Box sx={{ whiteSpace: "pre-wrap" }}>
-                <Typography component="div">{summary.content}</Typography>
-              </Box>
+              <div className="text-sm leading-relaxed whitespace-pre-wrap">{summary.content}</div>
             </>
           )}
-        </Paper>
+        </Card>
       ))}
-    </Stack>
+    </div>
   );
 }

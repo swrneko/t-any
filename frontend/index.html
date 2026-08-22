@@ -3,7 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#fcfcfd" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#09090c" media="(prefers-color-scheme: dark)" />
     <title>transcribe-anything</title>
+    <script>
+      // Paint the right scheme on the first frame. Without this the page flashes
+      // light before React mounts, which is worst for the people who chose dark.
+      (function () {
+        try {
+          var stored = localStorage.getItem("theme");
+          var dark =
+            stored === "dark" ||
+            ((stored === null || stored === "system") &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (error) {
+          // Private mode can refuse localStorage; the default scheme is fine.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

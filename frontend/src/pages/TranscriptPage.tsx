@@ -1,25 +1,31 @@
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Paper,
-  Stack,
-  Switch,
-  Typography,
-} from "@mui/material";
-import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Copy, Loader2, Pencil } from "lucide-react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
-import { api, type Job, type Transcript } from "../api/client";
-import { SummaryPanel } from "../components/SummaryPanel";
-import { useApiErrorMessage } from "../useApiError";
+import {
+  api,
+  type Job,
+  type Speaker,
+  type Transcript,
+  type TranscriptSegment,
+} from "@/api/client";
+import { ExportMenu } from "@/components/ExportMenu";
+import { ShareDialog } from "@/components/ShareDialog";
+import { SummaryPanel } from "@/components/SummaryPanel";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { useApiErrorMessage } from "@/useApiError";
 
 export function TranscriptPage() {
   const { jobId = "" } = useParams();
+  const [params] = useSearchParams();
   const { t } = useTranslation();
   const describe = useApiErrorMessage();
   const player = useRef<HTMLAudioElement>(null);
@@ -30,6 +36,8 @@ export function TranscriptPage() {
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [copied, setCopied] = useState(false);
   const [playhead, setPlayhead] = useState(0);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [draft, setDraft] = useState("");
 
   useEffect(() => {
     Promise.all([api.readJob(jobId), api.readTranscript(jobId)])
@@ -42,6 +50,14 @@ export function TranscriptPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
+  // A search result links to the moment it found, not just to the recording.
+  const at = Number(params.get("at") ?? Number.NaN);
+  useEffect(() => {
+    if (!transcript || Number.isNaN(at) || !player.current) return;
+    player.current.currentTime = at;
+    setPlayhead(at);
+  }, [transcript, at]);
+
   const copy = async () => {
     if (!transcript) return;
     await navigator.clipboard.writeText(transcript.text);
@@ -51,18 +67,20 @@ export function TranscriptPage() {
 
   if (error) {
     return (
-      <Stack spacing={2}>
+      <div className="grid gap-4">
         <BackLink />
-        <Alert severity="error">{error}</Alert>
-      </Stack>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
   if (!job || !transcript) {
     return (
-      <Box sx={{ display: "grid", placeItems: "center", py: 8 }}>
-        <CircularProgress />
-      </Box>
+      <div className="grid place-items-center py-16">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
     );
   }
 
@@ -70,100 +88,233 @@ export function TranscriptPage() {
     (segment) => playhead >= segment.start && playhead < segment.end,
   );
 
+  const nameOf = (label: string) =>
+    transcript.speakers.find((speaker) => speaker.label === label)?.display_name ?? label;
+
+  const correct = async (segment: TranscriptSegment) => {
+    setEditing(null);
+    if (draft.trim() === segment.text.trim()) return;
+    const saved = await api.correctSegment(job.id, segment.idx, draft);
+    const segments = transcript.segments.map((one) => (one.idx === saved.idx ? saved : one));
+    // `text` is derived, so it has to be re-derived: it is what the copy
+    // button copies, and it would otherwise still hold the old wording.
+    setTranscript({
+      ...transcript,
+      segments,
+      text: segments
+        .map((one) => one.text)
+        .join(" ")
+        .trim(),
+    });
+  };
+
   return (
-    <Stack spacing={3}>
+    <div className="grid gap-6">
       <BackLink />
 
-      <Stack
-        direction="row"
-        sx={{ alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}
-      >
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            {job.title}
-          </Typography>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{job.title}</h1>
           {transcript.language && (
-            <Typography variant="body2" color="text.secondary">
+            <p className="text-sm text-muted-foreground">
               {t("transcript.language", { language: transcript.language })}
-            </Typography>
+            </p>
           )}
-        </Box>
+        </div>
 
-        <Stack direction="row" sx={{ alignItems: "center", gap: 1 }}>
-          <Typography variant="body2" color="text.secondary">
+        <div className="flex flex-wrap items-center gap-3">
+          <Label htmlFor="timestamps" className="text-sm text-muted-foreground">
             {t("transcript.timestamps")}
-          </Typography>
-          <Switch
-            checked={showTimestamps}
-            onChange={(event) => setShowTimestamps(event.target.checked)}
-          />
-          <Button startIcon={<ContentCopyIcon />} onClick={() => void copy()}>
+          </Label>
+          <Switch id="timestamps" checked={showTimestamps} onCheckedChange={setShowTimestamps} />
+          <Button variant="outline" size="sm" onClick={() => void copy()}>
+            <Copy className="size-4" />
             {copied ? t("transcript.copied") : t("transcript.copy")}
           </Button>
-        </Stack>
-      </Stack>
+          <ExportMenu
+            urlFor={(format, options) => api.exportUrl(job.id, format, options)}
+            readText={(format, options) => api.readExport(job.id, format, options)}
+          />
+          <ShareDialog jobId={job.id} />
+        </div>
+      </div>
 
-      <Box
-        component="audio"
+      <audio
         ref={player}
         controls
         preload="metadata"
         src={api.audioUrl(job.id)}
         onTimeUpdate={(event) => setPlayhead(event.currentTarget.currentTime)}
-        sx={{ width: "100%" }}
+        className="w-full"
       />
 
-      <Paper elevation={0} sx={{ p: 3, borderRadius: 6 }}>
-        <Stack spacing={0.5}>
-          {transcript.segments.map((segment) => {
-            const active = segment.idx === current?.idx;
-            return (
-              <Stack
-                key={segment.idx}
-                direction="row"
-                spacing={2}
-                onClick={() => {
-                  if (player.current) {
-                    player.current.currentTime = segment.start;
-                    void player.current.play();
-                  }
-                }}
-                sx={{
-                  cursor: "pointer",
-                  borderRadius: 2,
-                  px: 1,
-                  py: 0.75,
-                  transition: "background-color 120ms",
-                  backgroundColor: active ? "action.selected" : "transparent",
-                  "&:hover": { backgroundColor: active ? "action.selected" : "action.hover" },
-                }}
-              >
-                {showTimestamps && (
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ fontVariantNumeric: "tabular-nums", minWidth: 64, pt: 0.25 }}
+      {transcript.speakers.length > 0 && (
+        <SpeakerBar
+          speakers={transcript.speakers}
+          onRename={(id, name) =>
+            void api.renameSpeaker(job.id, id, name).then((saved) =>
+              setTranscript({
+                ...transcript,
+                speakers: transcript.speakers.map((one) => (one.id === saved.id ? saved : one)),
+              }),
+            )
+          }
+        />
+      )}
+
+      <Card className="gap-0 p-4">
+        {transcript.segments.map((segment, index) => {
+          const active = segment.idx === current?.idx;
+          // Named once per turn, not once per segment: a name repeated on every
+          // line is what makes a diarised transcript unreadable.
+          const speaks =
+            segment.speaker && segment.speaker !== transcript.segments[index - 1]?.speaker
+              ? nameOf(segment.speaker)
+              : null;
+          return (
+            <Fragment key={segment.idx}>
+              {speaks && (
+                <p className="mt-4 px-2 text-sm font-semibold text-primary first:mt-0">{speaks}</p>
+              )}
+              {editing === segment.idx ? (
+                <Textarea
+                  autoFocus
+                  rows={2}
+                  value={draft}
+                  className="my-1"
+                  aria-label={t("transcript.correct")}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onBlur={() => void correct(segment)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                    }
+                    // Escape puts the text back, and the equality check below
+                    // turns the blur that follows into nothing.
+                    if (event.key === "Escape") {
+                      setDraft(segment.text);
+                      setEditing(null);
+                    }
+                  }}
+                />
+              ) : (
+                <div className="group flex items-start">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (player.current) {
+                        player.current.currentTime = segment.start;
+                        void player.current.play();
+                      }
+                    }}
+                    className={cn(
+                      "flex flex-1 gap-4 rounded-md px-2 py-1.5 text-left transition-colors outline-none",
+                      "hover:bg-accent/60 focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                      active && "bg-accent",
+                    )}
                   >
-                    {formatTimestamp(segment.start)}
-                  </Typography>
-                )}
-                <Typography sx={{ fontWeight: active ? 600 : 400 }}>{segment.text}</Typography>
-              </Stack>
-            );
-          })}
-        </Stack>
-      </Paper>
+                    {showTimestamps && (
+                      <span className="min-w-14 pt-0.5 font-mono text-sm tabular-nums text-muted-foreground">
+                        {formatTimestamp(segment.start)}
+                      </span>
+                    )}
+                    <span className={cn(active && "font-medium", segment.edited && "italic")}>
+                      {segment.text}
+                    </span>
+                  </button>
+                  {/* Kept out of the seek button: clicking a line is how you
+                      jump to it, and one click cannot mean two things. */}
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("transcript.correct")}
+                    title={t(segment.edited ? "transcript.corrected" : "transcript.correct")}
+                    className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                    onClick={() => {
+                      setDraft(segment.text);
+                      setEditing(segment.idx);
+                    }}
+                  >
+                    <Pencil className="size-3.5 text-muted-foreground" />
+                  </Button>
+                </div>
+              )}
+            </Fragment>
+          );
+        })}
+      </Card>
 
       <SummaryPanel jobId={job.id} />
-    </Stack>
+    </div>
+  );
+}
+
+function SpeakerBar({
+  speakers,
+  onRename,
+}: {
+  speakers: Speaker[];
+  onRename: (id: string, displayName: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-sm text-muted-foreground">{t("transcript.speakers")}</span>
+      {speakers.map((speaker) =>
+        editing === speaker.id ? (
+          <Input
+            key={speaker.id}
+            autoFocus
+            value={draft}
+            className="h-8 w-40"
+            placeholder={speaker.label}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={() => {
+              setEditing(null);
+              if (draft.trim() !== (speaker.display_name ?? "")) onRename(speaker.id, draft);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+              // Escape leaves the name as it was: a rename typed into the wrong
+              // speaker has to be abandonable.
+              if (event.key === "Escape") {
+                setDraft(speaker.display_name ?? "");
+                setEditing(null);
+              }
+            }}
+          />
+        ) : (
+          <Button
+            key={speaker.id}
+            variant="outline"
+            size="sm"
+            title={t("transcript.rename")}
+            onClick={() => {
+              setDraft(speaker.display_name ?? "");
+              setEditing(speaker.id);
+            }}
+          >
+            <Pencil className="size-3 text-muted-foreground" />
+            {speaker.display_name ?? speaker.label}
+          </Button>
+        ),
+      )}
+    </div>
   );
 }
 
 function BackLink() {
   const { t } = useTranslation();
   return (
-    <Button component={Link} to="/" startIcon={<ArrowBackIcon />} sx={{ alignSelf: "start" }}>
-      {t("transcript.back")}
+    <Button asChild variant="ghost" size="sm" className="justify-self-start">
+      <Link to="/">
+        <ArrowLeft className="size-4" />
+        {t("transcript.back")}
+      </Link>
     </Button>
   );
 }

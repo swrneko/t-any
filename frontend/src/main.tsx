@@ -1,10 +1,11 @@
-import { CssBaseline, ThemeProvider } from "@mui/material";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import App from "./App";
+import { ThemeProvider } from "./components/ThemeProvider";
+import { TooltipProvider } from "./components/ui/tooltip";
 import "./i18n";
-import { theme } from "./theme";
+import "./index.css";
 
 const container = document.getElementById("root");
 if (!container) {
@@ -13,9 +14,10 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <ThemeProvider theme={theme} defaultMode="system">
-      <CssBaseline />
-      <App />
+    <ThemeProvider>
+      <TooltipProvider delayDuration={300}>
+        <App />
+      </TooltipProvider>
     </ThemeProvider>
   </StrictMode>,
 );

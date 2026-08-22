@@ -1,11 +1,14 @@
-import LogoutIcon from "@mui/icons-material/Logout";
-import { Alert, AppBar, Box, Button, Container, Toolbar, Typography } from "@mui/material";
+import { AudioLines, LogOut, Search, ShieldAlert, SlidersHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
-import type { AuthMode } from "../api/client";
-import { LanguageSwitch } from "./LanguageSwitch";
+import { LanguageSwitch } from "@/components/LanguageSwitch";
+import { ThemeSwitch } from "@/components/ThemeSwitch";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import type { AuthMode } from "@/api/client";
 
 interface AppShellProps {
   authMode: AuthMode;
@@ -15,35 +18,75 @@ interface AppShellProps {
 
 export function AppShell({ authMode, onLogout, children }: AppShellProps) {
   const { t } = useTranslation();
+  const { pathname } = useLocation();
 
   return (
-    <Box sx={{ minHeight: "100dvh" }}>
-      <AppBar position="sticky" color="transparent" elevation={0}>
-        <Toolbar sx={{ gap: 2 }}>
-          <Typography
-            component={Link}
+    <div className="min-h-dvh">
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 w-full max-w-4xl items-center gap-2 px-4">
+          <Link
             to="/"
-            variant="h6"
-            sx={{ flexGrow: 1, fontWeight: 700, color: "inherit", textDecoration: "none" }}
+            className="mr-auto flex items-center gap-2.5 rounded-lg font-semibold tracking-tight outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
+            <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground shadow-xs">
+              <AudioLines className="size-4.5" />
+            </span>
             {t("app.name")}
-          </Typography>
-          <Button component={Link} to="/presets" color="inherit">
-            {t("presets.title")}
+          </Link>
+
+          <Button
+            asChild
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t("search.title")}
+            className={cn(pathname === "/search" && "bg-accent text-accent-foreground")}
+          >
+            <Link to="/search">
+              <Search className="size-4" />
+            </Link>
           </Button>
+
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className={cn(pathname === "/presets" && "bg-accent text-accent-foreground")}
+          >
+            <Link to="/presets">{t("presets.title")}</Link>
+          </Button>
+
+          <Button
+            asChild
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t("settings.title")}
+            className={cn(pathname === "/settings" && "bg-accent text-accent-foreground")}
+          >
+            <Link to="/settings">
+              <SlidersHorizontal className="size-4" />
+            </Link>
+          </Button>
+
           <LanguageSwitch />
+          <ThemeSwitch />
+
           {authMode === "builtin" && (
-            <Button startIcon={<LogoutIcon />} onClick={onLogout}>
-              {t("home.logout")}
+            <Button variant="ghost" size="icon-sm" aria-label={t("home.logout")} onClick={onLogout}>
+              <LogOut className="size-4" />
             </Button>
           )}
-        </Toolbar>
-      </AppBar>
+        </div>
+      </header>
 
-      <Container maxWidth="md" sx={{ py: 3, display: "grid", gap: 3 }}>
-        {authMode === "disabled" && <Alert severity="warning">{t("authDisabled.banner")}</Alert>}
+      <main className="mx-auto grid w-full max-w-4xl gap-6 px-4 py-8">
+        {authMode === "disabled" && (
+          <Alert variant="warning">
+            <ShieldAlert />
+            <AlertDescription>{t("authDisabled.banner")}</AlertDescription>
+          </Alert>
+        )}
         {children}
-      </Container>
-    </Box>
+      </main>
+    </div>
   );
 }
