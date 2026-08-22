@@ -113,3 +113,30 @@ async def test_several_files_become_one_recording(
     job = response.json()
     assert job["title"] == "part-one.wav +1"
     assert job["source_ref"] == "part-one.wav, part-two.wav"
+
+
+async def test_a_recording_says_how_many_files_it_was_made_of(
+    client: AsyncClient, admin: dict[str, str], sample_audio: Path
+) -> None:
+    """Counted rather than inferred from the names: a filename may hold a comma,
+    and a list that splits wrong would mislabel the row in the archive."""
+    await client.post("/api/auth/login", json=admin)
+
+    with sample_audio.open("rb") as first, sample_audio.open("rb") as second:
+        joined = (
+            await client.post(
+                "/api/jobs",
+                files=[
+                    ("file", ("Ivanov, A. - part one.wav", first, "audio/wav")),
+                    ("file", ("part-two.wav", second, "audio/wav")),
+                ],
+            )
+        ).json()
+
+    with sample_audio.open("rb") as handle:
+        alone = (
+            await client.post("/api/jobs", files={"file": ("meeting.wav", handle, "audio/wav")})
+        ).json()
+
+    assert (await client.get(f"/api/jobs/{joined['id']}")).json()["parts"] == 2
+    assert alone["parts"] == 1

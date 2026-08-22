@@ -123,6 +123,11 @@ class Job(Base):
     source_ref: Mapped[str] = mapped_column(sa.Text)
     title: Mapped[str] = mapped_column(sa.Text)
 
+    # How many files were joined to make this recording. Counted here rather
+    # than by splitting `source_ref`, which holds their names and cannot be
+    # split safely: a filename is allowed to contain a comma.
+    parts: Mapped[int] = mapped_column(sa.Integer, default=1, server_default="1")
+
     # What the extractor knew about the recording. A channel name and a day, not
     # an instant: yt-dlp reports the upload date with no time and no zone, and
     # storing it as a timestamp would move it across midnight for half the world.

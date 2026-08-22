@@ -53,6 +53,7 @@ def _present(job: Job, settings: Settings) -> JobOut:
         title=job.title,
         source_type=job.source_type,
         source_ref=job.source_ref,
+        parts=job.parts,
         author=job.author,
         published_on=job.published_on,
         has_thumbnail=job.has_thumbnail,
@@ -120,6 +121,7 @@ async def create_job(
         owner_id=user.id,
         source_type="upload",
         source_ref=", ".join(names),
+        parts=len(names),
         title=names[0] if len(names) == 1 else f"{names[0]} +{len(names) - 1}",
         diarize=diarize,
     )

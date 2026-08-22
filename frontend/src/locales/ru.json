@@ -78,7 +78,8 @@
     "start": "Начать ({{total}})",
     "moveUp": "Выше",
     "moveDown": "Ниже",
-    "remove": "Убрать из списка"
+    "remove": "Убрать из списка",
+    "parts": "Из {{total}} файлов"
   },
   "transcript": {
     "back": "В историю",

@@ -78,7 +78,8 @@
     "start": "Start ({{total}})",
     "moveUp": "Move up",
     "moveDown": "Move down",
-    "remove": "Remove from the list"
+    "remove": "Remove from the list",
+    "parts": "From {{total}} files"
   },
   "transcript": {
     "back": "To the archive",

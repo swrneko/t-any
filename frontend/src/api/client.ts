@@ -28,8 +28,11 @@ export interface Job {
   id: string;
   title: string;
   source_type: JobSource;
-  /** The uploaded filename, or the link the job was created from. */
+  /** The uploaded filename, or the link the job was created from. Several files
+   *  joined into one recording keep every name here, comma separated. */
   source_ref: string;
+  /** How many files were joined to make it. One for everything else. */
+  parts: number;
   author: string | null;
   /** A calendar day (YYYY-MM-DD), not an instant: that is all the extractor knows. */
   published_on: string | null;

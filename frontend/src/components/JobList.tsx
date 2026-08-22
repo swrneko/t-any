@@ -1,4 +1,4 @@
-import { Trash2, VolumeX, X } from "lucide-react";
+import { Layers, Trash2, VolumeX, X } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -80,7 +80,24 @@ export function JobList({
           )}
 
           <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{job.title}</p>
+            <p className="flex items-center gap-2 truncate font-medium">
+              <span className="truncate">{job.title}</span>
+              {/* A joined recording looks like any other row otherwise, and its
+                  title only hints at the rest with a "+2". The names it was made
+                  of are on the badge, where somebody looking for one can find
+                  it without opening the recording. */}
+              {job.parts > 1 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="shrink-0 font-normal">
+                      <Layers className="size-3" />
+                      {t("jobs.parts", { total: job.parts })}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>{job.source_ref}</TooltipContent>
+                </Tooltip>
+              )}
+            </p>
             <p className="truncate text-sm text-muted-foreground">
               {job.status === "failed"
                 ? describeCode(job.error_code, job.error_params)

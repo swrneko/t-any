@@ -75,8 +75,10 @@ class JobOut(BaseModel):
     id: uuid.UUID
     title: str
     source_type: str
-    # The upload's filename or the link that was submitted.
+    # The upload's filename or the link that was submitted. Several files joined
+    # into one recording keep all their names here, and `parts` counts them.
     source_ref: str
+    parts: int
     # What the extractor knew: a channel and a calendar day, both absent for an
     # upload. `has_thumbnail` says whether /jobs/{id}/thumbnail has anything.
     author: str | None
