@@ -102,6 +102,11 @@ dropping only the audio keeps every word and every export, and leaves the
 player silent. The audio is almost all of the size and almost none of the
 value, so that second option is usually the one you want.
 
+Settings → Storage does the same thing on a timer: drop audio older than N
+days, or delete recordings older than M. Both are off until you set a number,
+and the first one is usually the one worth setting — it frees nearly all of
+the space and loses nothing you can read.
+
 ## Security notes
 
 Read these before exposing the service to the internet.

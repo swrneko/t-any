@@ -58,6 +58,7 @@ them readable in order.
 │   │   ├── media.py            ffprobe and ffmpeg; the only media knowledge
 │   │   ├── probe.py            asks an endpoint for /v1/models; the API's only
 │   │   │                       outbound call
+│   │   ├── retention.py        removing a recording, by hand or by policy
 │   │   ├── stt.py              OpenAI transcription protocol client
 │   │   ├── llm.py              OpenAI chat protocol client, plain and streamed
 │   │   ├── diarize.py          the diariser's own protocol, and the overlap merge
@@ -69,7 +70,8 @@ them readable in order.
 │   │   ├── presets.py          the built-in prompts
 │   │   ├── worker.py           claim loop; also the worker entrypoint
 │   │   └── api/                health, setup, auth, jobs, providers, presets,
-│   │                           summaries, search, tokens, public (no session)
+│   │                           summaries, search, tokens, settings (retention
+│   │                           and disk usage), public (no session)
 │   ├── migrations/             alembic
 │   └── tests/                  pytest, async, real HTTP through ASGITransport
 │       └── stubs.py            stand-in STT server (a stub, never a patch)
@@ -130,8 +132,9 @@ words alone -- an hour of audio is tens of megabytes and the transcript of it
 is tens of kilobytes, so freeing the first while keeping the second is the
 operation that actually matters. Rows go before files, segments go explicitly
 so the search index follows, and a recording still being worked on is refused
-rather than pulled out from under the worker. Retention policies, then users,
-then the API section come next, in that order.
+rather than pulled out from under the worker. Retention rides on top of that
+same code: two policies, both off until a number is set, applied by the worker
+on the hour beside its claim loop. Users, then the API section, come next.
 
 All planned milestones (0 to 6) are complete: auth, the transcription pipeline, chunking on
 silence, live progress over SSE, cancellation that really stops the work,
@@ -167,8 +170,12 @@ Known gaps left deliberately open:
 - Deletion is confirmed, never undone. There is no `deleted_at`, so nothing can
   be brought back; the alternative would put a filter in every query and leave
   files to sweep later, which is more machinery than a rare operation deserves.
-- Nothing removes anything on its own yet. Disk grows until somebody presses a
-  button, and how much each recording costs is only visible per row.
+- Retention is instance-wide, not per person. On an instance with two accounts
+  one policy governs both archives, which is right for the size this is built
+  for and wrong for any size above it.
+- The sweeper measures age from `finished_at`, so a recording that never
+  finished is never swept -- correct, but it means a failed job sits in the
+  archive until somebody deletes it.
 - The connection test asks `/v1/models`, which is part of the OpenAI surface
   but not universal: a server that does not implement it looks unreachable
   while working perfectly. The wording in the UI says so; nothing else can.

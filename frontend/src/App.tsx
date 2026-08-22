@@ -15,6 +15,7 @@ import { TranscriptPage } from "@/pages/TranscriptPage";
 import { ApiSection } from "@/pages/settings/ApiSection";
 import { AppearanceSection } from "@/pages/settings/AppearanceSection";
 import { ProvidersSection } from "@/pages/settings/ProvidersSection";
+import { StorageSection } from "@/pages/settings/StorageSection";
 import { useJobFeed } from "@/useJobFeed";
 
 export default function App() {
@@ -101,8 +102,14 @@ function Workspace({
         <Route path="/history" element={<HistoryPage feed={feed} />} />
         <Route path="/jobs/:jobId" element={<TranscriptPage />} />
 
-        <Route path="/settings" element={<SettingsPage />}>
+        <Route path="/settings" element={<SettingsPage isAdmin={user.is_admin} />}>
           <Route index element={<Navigate to="appearance" replace />} />
+          {/* Registered either way: hiding the link is how it is hidden, and a
+              typed address should land somewhere rather than nowhere. */}
+          <Route
+            path="storage"
+            element={user.is_admin ? <StorageSection /> : <Navigate to="../appearance" replace />}
+          />
           <Route path="appearance" element={<AppearanceSection />} />
           <Route path="providers" element={<ProvidersSection isAdmin={user.is_admin} />} />
           <Route path="presets" element={<PresetsPage />} />

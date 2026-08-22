@@ -20,6 +20,10 @@ class Settings(BaseSettings):
 
     max_upload_size: int = 5 * 1024**3
 
+    # How often the worker applies the retention policies. Hourly is plenty:
+    # the shortest policy anyone can set is a day.
+    retention_sweep_seconds: float = 3600.0
+
     sse_poll_seconds: float = 1.0
     cancel_poll_seconds: float = 1.0
     heartbeat_stale_seconds: float = 120.0

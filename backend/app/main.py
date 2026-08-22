@@ -16,6 +16,9 @@ from app.api import (
     summaries,
     tokens,
 )
+# Aliased: `settings` is the name of the configuration object everywhere else
+# in this module, and the router must not shadow it.
+from app.api import settings as settings_api
 from app.config import Settings
 from app.db import Database
 from app.errors import register_error_handlers
@@ -60,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(search.router, prefix="/api")
     app.include_router(public.router, prefix="/api")
     app.include_router(tokens.router, prefix="/api")
+    app.include_router(settings_api.router, prefix="/api")
     mount_share_preview(app, app.state.settings.frontend_dist)
     mount_frontend(app, app.state.settings.frontend_dist)
     return app

@@ -64,6 +64,20 @@ class ApiToken(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
 
+class InstanceSetting(Base):
+    """Configuration that outlives the environment.
+
+    Set in the UI, kept here, read without a restart -- the same bargain as
+    providers, for the handful of values that have nowhere else to live. The
+    value is JSON so a policy can grow a field without a migration.
+    """
+
+    __tablename__ = "instance_settings"
+
+    key: Mapped[str] = mapped_column(sa.String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(sa.Text)
+
+
 class Provider(Base):
     """An OpenAI-compatible endpoint.
 

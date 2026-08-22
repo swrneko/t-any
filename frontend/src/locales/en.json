@@ -234,7 +234,8 @@
       "appearance": "Appearance",
       "providers": "Providers",
       "presets": "Presets",
-      "api": "API"
+      "api": "API",
+      "storage": "Storage"
     },
     "appearance": {
       "dates": "Dates follow the interface language, not the browser's."
@@ -268,6 +269,18 @@
       "test": "Test connection",
       "answered": "answered in {{ms}} ms · models: {{models}}",
       "testHint": "This asks /v1/models. Not every OpenAI-compatible server offers it, so silence here does not always mean it will not work."
+    },
+    "storage": {
+      "explanation": "What the archive costs, and what may be thrown away on its own. Both policies are off until you set them.",
+      "audio": "Audio: {{size}}",
+      "other": "Everything else: {{size}} · recordings: {{n}}",
+      "audioDays": "Drop audio after, days",
+      "audioHint": "The transcript, the exports and the search stay. Only the player goes quiet.",
+      "jobDays": "Delete recordings after, days",
+      "jobHint": "Everything goes: the words, the summaries and the share link.",
+      "keep": "Keep forever",
+      "saved": "Saved",
+      "warning": "Recordings finished more than {{days}} days ago will be deleted, and nothing can bring them back."
     }
   },
   "history": {

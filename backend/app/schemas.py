@@ -96,6 +96,26 @@ class JobOut(BaseModel):
     finished_at: datetime | None
 
 
+class Retention(BaseModel):
+    """How long things are kept. Null means forever, and that is the default.
+
+    Two policies rather than one, because the expensive half and the valuable
+    half are not the same half: dropping audio frees nearly all of the space
+    and loses nearly none of the content, while dropping the recording entirely
+    is a real loss and has to be asked for separately.
+    """
+
+    audio_days: int | None = Field(default=None, ge=1)
+    job_days: int | None = Field(default=None, ge=1)
+
+
+class StorageOut(BaseModel):
+    audio_bytes: int
+    # Thumbnails, and whatever else a recording keeps beside its audio.
+    other_bytes: int
+    recordings: int
+
+
 class JobsDeleteIn(BaseModel):
     ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
     # The audio alone: an hour of it is tens of megabytes, the words are tens

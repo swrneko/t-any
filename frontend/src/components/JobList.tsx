@@ -178,6 +178,13 @@ function formatMeta(job: Job, locale: string): string {
 }
 
 export function formatBytes(bytes: number): string {
-  const mb = bytes / 1024 ** 2;
-  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.max(1, Math.round(mb))} MB`;
+  const kb = bytes / 1024;
+  if (kb < 1) return `${bytes} B`;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+
+  const mb = kb / 1024;
+  // One decimal below ten, none above: "1.4 MB" is worth reading, "137.2 MB"
+  // is not.
+  if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
 }

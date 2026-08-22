@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import socket
+import time
 from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
@@ -20,6 +21,7 @@ from app.errors import ApiError
 from app.llm import llm_http_client
 from app.media import detect_silences, extract_chunk, normalize_to_opus, probe
 from app.models import Job, Provider, Segment, Speaker, Summary, Transcript, utcnow
+from app.retention import sweep as sweep_expired
 from app.sources import download_media, ensure_allowed_host, fetch_with_ytdlp
 from app.summary_runner import LlmFactory, SummaryRunner
 from app.stt import SttClient
@@ -136,9 +138,23 @@ class Worker:
 
     async def run_forever(self) -> None:
         await self.recover_stale_jobs()
+        due = 0.0
         while True:
+            # The claim loop is already awake every few seconds, so retention
+            # rides along on it rather than bringing a scheduler with it.
+            if time.monotonic() >= due:
+                due = time.monotonic() + self.settings.retention_sweep_seconds
+                freed, removed = await self.sweep()
+                if freed or removed:
+                    log.info("retention freed %d recording(s) and removed %d", freed, removed)
+
             if not await self.run_once():
                 await asyncio.sleep(IDLE_POLL_SECONDS)
+
+    async def sweep(self) -> tuple[int, int]:
+        """Apply the retention policies. Does nothing at all until one is set."""
+        async with self.database.session_factory() as session:
+            return await sweep_expired(session, self.settings)
 
     async def run_once(self) -> bool:
         # Transcription first: a summary is worthless until its transcript

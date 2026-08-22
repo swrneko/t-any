@@ -1,4 +1,4 @@
-import { KeyRound, Palette, Server, Sparkles } from "lucide-react";
+import { HardDrive, KeyRound, Palette, Server, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const SECTIONS = [
-  { path: "appearance", Icon: Palette },
-  { path: "providers", Icon: Server },
-  { path: "presets", Icon: Sparkles },
-  { path: "api", Icon: KeyRound },
+  { path: "storage", Icon: HardDrive, adminOnly: true },
+  { path: "appearance", Icon: Palette, adminOnly: false },
+  { path: "providers", Icon: Server, adminOnly: false },
+  { path: "presets", Icon: Sparkles, adminOnly: false },
+  { path: "api", Icon: KeyRound, adminOnly: false },
 ] as const;
 
 /**
@@ -20,9 +21,10 @@ const SECTIONS = [
  * that hiding an admin-only section is a condition inside a component rather
  * than a missing link.
  */
-export function SettingsPage() {
+export function SettingsPage({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation();
   const { pathname } = useLocation();
+  const sections = SECTIONS.filter((section) => isAdmin || !section.adminOnly);
 
   return (
     <div className="grid gap-6">
@@ -30,7 +32,7 @@ export function SettingsPage() {
 
       <div className="grid gap-6 md:grid-cols-[13rem_1fr]">
         <nav className="grid content-start gap-1">
-          {SECTIONS.map(({ path, Icon }) => (
+          {sections.map(({ path, Icon }) => (
             <Button
               key={path}
               asChild

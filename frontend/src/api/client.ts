@@ -178,6 +178,18 @@ export interface ProviderDraft {
   is_default: boolean;
 }
 
+/** How long things are kept. Null means forever, and that is the default. */
+export interface Retention {
+  audio_days: number | null;
+  job_days: number | null;
+}
+
+export interface Storage {
+  audio_bytes: number;
+  other_bytes: number;
+  recordings: number;
+}
+
 /** What the endpoint said when asked. A refusal is an answer, not an error. */
 export interface ProviderProbe {
   reachable: boolean;
@@ -354,6 +366,16 @@ export const api = {
     request<CreatedApiToken>("/api/tokens", { method: "POST", body: JSON.stringify({ name }) }),
 
   revokeToken: (id: string) => request<void>(`/api/tokens/${id}`, { method: "DELETE" }),
+
+  readRetention: () => request<Retention>("/api/settings/retention"),
+
+  writeRetention: (policy: Retention) =>
+    request<Retention>("/api/settings/retention", {
+      method: "PUT",
+      body: JSON.stringify(policy),
+    }),
+
+  readStorage: () => request<Storage>("/api/settings/storage"),
 
   listProviders: () => request<Provider[]>("/api/providers"),
 

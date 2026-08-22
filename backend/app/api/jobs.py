@@ -1,7 +1,6 @@
 import asyncio
 import json
 import secrets
-import shutil
 import uuid
 from collections.abc import AsyncIterator, Mapping
 from datetime import timedelta
@@ -16,6 +15,7 @@ from app.deps import CurrentUserDep, SessionDep, SettingsDep
 from app.errors import ApiError
 from app.exports import FORMATS, MEDIA_TYPES, Options, lines_from, render
 from app.models import Job, Segment, Share, Speaker, Transcript, User, utcnow
+from app.retention import AUDIO_NAME, forget_job, remove_audio, remove_media
 from app.schemas import (
     JobOut,
     JobsDeleteIn,
@@ -33,8 +33,6 @@ from app.sources import ensure_allowed_host, parse_source_url
 from app.storage import save_upload
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
-
-AUDIO_NAME = "audio.ogg"
 
 
 def _audio_bytes(settings: Settings, job_id: uuid.UUID) -> int | None:
@@ -442,28 +440,6 @@ def _require_finished(job: Job) -> None:
         )
 
 
-async def _forget(session: SessionDep, job: Job) -> None:
-    """Drop the rows. Everything else falls with them by cascade."""
-    # Segments go explicitly: the search index is kept by triggers on that
-    # table, and SQLite does not fire them for rows removed by a foreign key
-    # cascade. A recording that still answered searches would look deleted
-    # without being deleted.
-    await session.execute(
-        delete(Segment).where(
-            Segment.transcript_id.in_(select(Transcript.id).where(Transcript.job_id == job.id))
-        )
-    )
-    await session.delete(job)
-
-
-def _remove_media(settings: Settings, job_id: uuid.UUID) -> None:
-    shutil.rmtree(settings.media_dir / str(job_id), ignore_errors=True)
-
-
-def _remove_audio(settings: Settings, job_id: uuid.UUID) -> None:
-    (settings.media_dir / str(job_id) / AUDIO_NAME).unlink(missing_ok=True)
-
-
 @router.delete("/{job_id}", status_code=204)
 async def delete_job(
     job_id: uuid.UUID, user: CurrentUserDep, session: SessionDep, settings: SettingsDep
@@ -471,11 +447,11 @@ async def delete_job(
     job = await _owned_job(session, user, job_id)
     _require_finished(job)
 
-    await _forget(session, job)
+    await forget_job(session, job)
     # Rows first, files second: a directory nobody points at is litter, while a
     # row pointing at files that are gone is a transcript that cannot play.
     await session.commit()
-    _remove_media(settings, job_id)
+    remove_media(settings, job_id)
 
 
 @router.delete("/{job_id}/audio", status_code=204)
@@ -485,7 +461,7 @@ async def delete_job_audio(
     """Free the expensive half and keep the valuable one."""
     job = await _owned_job(session, user, job_id)
     _require_finished(job)
-    _remove_audio(settings, job.id)
+    remove_audio(settings, job.id)
 
 
 @router.post("/delete")
@@ -508,14 +484,14 @@ async def delete_jobs(
 
     if not body.audio_only:
         for job in doomed:
-            await _forget(session, job)
+            await forget_job(session, job)
     await session.commit()
 
     for job in doomed:
         if body.audio_only:
-            _remove_audio(settings, job.id)
+            remove_audio(settings, job.id)
         else:
-            _remove_media(settings, job.id)
+            remove_media(settings, job.id)
 
     return JobsDeleteOut(deleted=len(doomed), skipped=skipped)
 
