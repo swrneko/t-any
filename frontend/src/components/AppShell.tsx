@@ -34,14 +34,15 @@ export function AppShell({ authMode, onLogout, children }: AppShellProps) {
             {t("app.name")}
           </Link>
 
+          {/* The archive is where searching happens, so one control opens both. */}
           <Button
             asChild
             variant="ghost"
             size="icon-sm"
-            aria-label={t("search.title")}
-            className={cn(pathname === "/search" && "bg-accent text-accent-foreground")}
+            aria-label={t("history.title")}
+            className={cn(pathname === "/history" && "bg-accent text-accent-foreground")}
           >
-            <Link to="/search">
+            <Link to="/history">
               <Search className="size-4" />
             </Link>
           </Button>
@@ -49,18 +50,9 @@ export function AppShell({ authMode, onLogout, children }: AppShellProps) {
           <Button
             asChild
             variant="ghost"
-            size="sm"
-            className={cn(pathname === "/presets" && "bg-accent text-accent-foreground")}
-          >
-            <Link to="/presets">{t("presets.title")}</Link>
-          </Button>
-
-          <Button
-            asChild
-            variant="ghost"
             size="icon-sm"
             aria-label={t("settings.title")}
-            className={cn(pathname === "/settings" && "bg-accent text-accent-foreground")}
+            className={cn(pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}
           >
             <Link to="/settings">
               <SlidersHorizontal className="size-4" />

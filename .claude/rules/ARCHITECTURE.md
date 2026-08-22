@@ -77,11 +77,13 @@ them readable in order.
     ├── i18n.ts + locales/      en, ru
     ├── useApiError.ts          error code -> translated message
     ├── lib/utils.ts            cn(), the only thing shadcn needs from us
+    ├── useJobFeed.ts           one job feed above the router: queue vs archive
     ├── components/ui/          shadcn components, owned and editable
-    ├── components/             AppShell, AuthLayout, Field, ExportMenu,
+    ├── components/             AppShell, AuthLayout, Field, JobList, ExportMenu,
     │                           ShareDialog, Theme/LanguageSwitch
-    └── pages/                  Setup, Login, Jobs, Transcript, Presets,
-                                Search, Settings, Shared (no account needed)
+    └── pages/                  Setup, Login, Jobs (the queue), History (archive
+                                and search), Transcript, Settings (a shell over
+                                settings/*), Shared (no account needed)
 ```
 
 ## Invariants
@@ -107,7 +109,18 @@ them readable in order.
    because this app reports degraded configuration and finished work, which
    the shadcn defaults have no colour for.
 
+7. **The queue and the archive are different questions.** The home page answers
+   "what is happening now" and the history page answers "what do I have"; a job
+   appears on the first until it is terminal, and stays there for the rest of
+   the session so it does not vanish under the eye that is watching it. Two
+   lists holding the same rows would leave neither of them meaning anything.
+
 ## Status
+
+Milestone 7 (SPEC §13) is under way: the navigation move is done -- three
+screens, settings as a shell over addressed sections, search folded into the
+archive -- and nothing behind it is built yet. Deletion, retention, users and
+provider editing come next, in that order.
 
 All planned milestones (0 to 6) are complete: auth, the transcription pipeline, chunking on
 silence, live progress over SSE, cancellation that really stops the work,

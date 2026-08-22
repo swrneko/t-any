@@ -4,10 +4,19 @@ import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { api, MARK_END, MARK_START, type SearchHit } from "@/api/client";
+import { JobList } from "@/components/JobList";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import type { JobFeed } from "@/useJobFeed";
 
-export function SearchPage() {
+/**
+ * Everything that finished, and the search over it.
+ *
+ * Search is not a screen of its own: it is the same archive, filtered by what
+ * was said instead of by when it arrived. An empty field means "show me all of
+ * it", which is what an archive page is for anyway.
+ */
+export function HistoryPage({ feed }: { feed: JobFeed }) {
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
   const query = params.get("q") ?? "";
@@ -31,9 +40,11 @@ export function SearchPage() {
     return () => clearTimeout(timer);
   }, [query]);
 
+  const searching = query.trim() !== "";
+
   return (
     <div className="grid gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">{t("search.title")}</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("history.title")}</h1>
 
       <div className="relative">
         <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -47,13 +58,22 @@ export function SearchPage() {
         />
       </div>
 
-      {busy && hits === null && <Loader2 className="size-5 animate-spin text-muted-foreground" />}
+      {!searching &&
+        (feed.archive.length > 0 ? (
+          <JobList jobs={feed.archive} />
+        ) : (
+          feed.jobs !== null && <p className="text-sm text-muted-foreground">{t("history.empty")}</p>
+        ))}
 
-      {hits !== null && hits.length === 0 && (
+      {searching && busy && hits === null && (
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      )}
+
+      {searching && hits !== null && hits.length === 0 && (
         <p className="text-sm text-muted-foreground">{t("search.nothing", { query })}</p>
       )}
 
-      {hits !== null && hits.length > 0 && (
+      {searching && hits !== null && hits.length > 0 && (
         <Card className="gap-0 overflow-hidden p-0">
           {hits.map((hit) => (
             <Link

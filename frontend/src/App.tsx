@@ -2,16 +2,20 @@ import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-import { api, type SetupStatus, type User } from "@/api/client";
+import { api, type AuthMode, type SetupStatus, type User } from "@/api/client";
 import { AppShell } from "@/components/AppShell";
+import { HistoryPage } from "@/pages/HistoryPage";
 import { JobsPage } from "@/pages/JobsPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { PresetsPage } from "@/pages/PresetsPage";
-import { SearchPage } from "@/pages/SearchPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { SetupPage } from "@/pages/SetupPage";
 import { SharedPage } from "@/pages/SharedPage";
 import { TranscriptPage } from "@/pages/TranscriptPage";
+import { ApiSection } from "@/pages/settings/ApiSection";
+import { AppearanceSection } from "@/pages/settings/AppearanceSection";
+import { ProvidersSection } from "@/pages/settings/ProvidersSection";
+import { useJobFeed } from "@/useJobFeed";
 
 export default function App() {
   const [status, setStatus] = useState<SetupStatus | null>(null);
@@ -62,25 +66,50 @@ export default function App() {
             ) : !user ? (
               <LoginPage onLoggedIn={setUser} />
             ) : (
-              <AppShell
+              <Workspace
                 authMode={status.auth_mode}
                 onLogout={() => {
                   void logout();
                 }}
-              >
-                <Routes>
-                  <Route path="/" element={<JobsPage />} />
-                  <Route path="/jobs/:jobId" element={<TranscriptPage />} />
-                  <Route path="/search" element={<SearchPage />} />
-                  <Route path="/presets" element={<PresetsPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </AppShell>
+              />
             )
           }
         />
       </Routes>
     </BrowserRouter>
+  );
+}
+
+/** Everything behind the gate. The job feed is held here rather than in a page
+ *  so that walking to the archive and back does not lose the queue. */
+function Workspace({ authMode, onLogout }: { authMode: AuthMode; onLogout: () => void }) {
+  const feed = useJobFeed();
+
+  return (
+    <AppShell authMode={authMode} onLogout={onLogout}>
+      <Routes>
+        <Route path="/" element={<JobsPage feed={feed} />} />
+        <Route path="/history" element={<HistoryPage feed={feed} />} />
+        <Route path="/jobs/:jobId" element={<TranscriptPage />} />
+
+        <Route path="/settings" element={<SettingsPage />}>
+          <Route index element={<Navigate to="appearance" replace />} />
+          <Route path="appearance" element={<AppearanceSection />} />
+          <Route path="providers" element={<ProvidersSection />} />
+          <Route path="presets" element={<PresetsPage />} />
+          <Route path="api" element={<ApiSection />} />
+        </Route>
+
+        {/* The two addresses that moved. A bookmark is not a reason to keep a
+            screen, but it is a reason not to answer it with the home page. */}
+        <Route
+          path="/search"
+          element={<Navigate to={`/history${window.location.search}`} replace />}
+        />
+        <Route path="/presets" element={<Navigate to="/settings/presets" replace />} />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AppShell>
   );
 }

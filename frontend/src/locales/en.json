@@ -38,7 +38,7 @@
     "banner": "Authentication is disabled. Anyone who can reach this address has full access."
   },
   "jobs": {
-    "title": "Transcripts",
+    "title": "Transcribe",
     "empty": "Nothing here yet. Drop in a file or paste a link to start.",
     "drop": "Drop a file here, or click to choose one",
     "uploading": "Uploading {{name}}…",
@@ -56,7 +56,9 @@
     "urlPlaceholder": "https://www.youtube.com/watch?v=…",
     "addUrl": "Add link",
     "diarize": "Identify speakers",
-    "diarizeHint": "Slower, and only worth it for a conversation."
+    "diarizeHint": "Slower, and only worth it for a conversation.",
+    "openProviders": "Open providers",
+    "inHistory": "{{total}} in the archive"
   },
   "transcript": {
     "back": "All transcripts",
@@ -172,7 +174,6 @@
     }
   },
   "search": {
-    "title": "Search",
     "label": "Search transcripts",
     "placeholder": "A word somebody said…",
     "nothing": "Nothing in the archive matches “{{query}}”."
@@ -219,6 +220,32 @@
       "revoke": "Revoke",
       "lastUsed": "Last used {{date}}",
       "neverUsed": "Never used"
+    },
+    "sections": {
+      "appearance": "Appearance",
+      "providers": "Providers",
+      "presets": "Presets",
+      "api": "API"
+    },
+    "appearance": {
+      "dates": "Dates follow the interface language, not the browser's."
+    },
+    "providers": {
+      "explanation": "Where speech-to-text and summarising happen. Editing them here is coming; this is what the instance uses today.",
+      "empty": "No providers yet.",
+      "seeding": "An empty list is filled from .env once at startup, and the database rules from then on.",
+      "default": "Default",
+      "noModel": "No model set",
+      "noKey": "No key",
+      "context": "{{tokens}} tokens of context",
+      "kind": {
+        "stt": "Speech to text",
+        "llm": "Language model"
+      }
     }
+  },
+  "history": {
+    "title": "Archive",
+    "empty": "Nothing has finished yet."
   }
 }
