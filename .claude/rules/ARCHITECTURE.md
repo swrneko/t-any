@@ -151,6 +151,18 @@ address, a curl that runs, where `/docs` is, and that errors are matched on
 
 Milestone 7 is complete.
 
+After it, two things the queue had been getting wrong. An upload can now be
+several files at once: `POST /api/jobs` takes a repeated `file` part and makes
+one recording out of all of them, joined in the order they were sent, so a
+meeting that arrived split across cards produces one transcript with continuous
+timestamps instead of three to stitch by hand. The home page asks which of the
+two is meant -- one recording, or a pile that becomes either one recording or a
+job each -- and the pile is a list you can reorder, because with everything
+going into one file position is the only thing being chosen. And a job's own
+page now answers during the work as well as after it: uploading lands on it
+directly, where the stage, the progress and the cancel button live until the
+words replace them.
+
 Beside it, the release path SPEC §10 promised and nothing implemented: `ci.yml`
 runs the suite, the typecheck, the frontend build and a no-push image build on
 every push and pull request; `release.yml` publishes `ghcr.io/<repo>` for amd64
@@ -176,6 +188,16 @@ overlap, with speakers renameable in one place.
 
 Known gaps left deliberately open:
 
+- The upload limit is per file, not per recording. Ten files just under it are
+  accepted as one job, and the joined result is however large it turns out to
+  be; the limit protects the request, and the sum has no request to protect.
+- Joining decodes every part before it encodes anything, so a merged upload
+  costs roughly what transcoding all of it costs, before a word is transcribed.
+  The parts are held on disk until then, unlike a single upload which is
+  converted and deleted immediately.
+- A merged recording remembers its parts only as a list of names in
+  `source_ref`. Which stretch of the transcript came from which file is not
+  recorded, so a part cannot be replaced or re-run on its own.
 - Diarisation runs after the whole recording is transcribed and reports no
   progress of its own -- the stage says what is happening and never says how
   far it has got. Streaming it would mean chunking two models against each

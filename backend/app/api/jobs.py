@@ -4,9 +4,11 @@ import secrets
 import uuid
 from collections.abc import AsyncIterator, Mapping
 from datetime import timedelta
+from hashlib import sha256
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, Form, Request, Response, UploadFile
+from fastapi import APIRouter, File, Form, Request, Response, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import delete, select
 
@@ -95,27 +97,47 @@ def _check_diarizer(settings: Settings, diarize: bool) -> None:
 
 @router.post("", status_code=201)
 async def create_job(
-    file: UploadFile,
+    file: Annotated[list[UploadFile], File()],
     user: CurrentUserDep,
     session: SessionDep,
     settings: SettingsDep,
     diarize: bool = Form(False),
 ) -> JobOut:
-    title = Path(file.filename or "upload").name
+    """One recording, out of however many files it arrived in.
+
+    A meeting split across three cards is still one meeting: sending the parts
+    together produces a single transcript with continuous timestamps, in the
+    order they were sent. Sending one file is the same call with a list of one,
+    so the wire format did not change for anybody already using it.
+    """
+    if not file:
+        raise ApiError(422, "no_file", "Send at least one file.")
+
+    names = [Path(one.filename or "upload").name for one in file]
     _check_diarizer(settings, diarize)
 
     job = Job(
         owner_id=user.id,
         source_type="upload",
-        source_ref=title,
-        title=title,
+        source_ref=", ".join(names),
+        title=names[0] if len(names) == 1 else f"{names[0]} +{len(names) - 1}",
         diarize=diarize,
     )
     session.add(job)
     await session.flush()
 
-    source = settings.tmp_dir / str(job.id) / f"source{Path(title).suffix}"
-    _, job.sha256 = await save_upload(file, source, settings.max_upload_size)
+    workspace = settings.tmp_dir / str(job.id)
+    digests = []
+    for index, (upload, name) in enumerate(zip(file, names, strict=True)):
+        # Zero-padded, because the worker finds the parts by sorting their names
+        # and a recording reassembled out of order is worse than no recording.
+        source = workspace / f"source-{index:04d}{Path(name).suffix}"
+        _, digest = await save_upload(upload, source, settings.max_upload_size)
+        digests.append(digest)
+
+    # One file keeps its own digest; several are named by the digest of their
+    # digests, so the column still means "the bytes this recording was made of".
+    job.sha256 = digests[0] if len(digests) == 1 else sha256("".join(digests).encode()).hexdigest()
 
     await session.commit()
     return _present(job, settings)

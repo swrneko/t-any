@@ -1,12 +1,13 @@
-import { ArrowRight, UploadCloud } from "lucide-react";
-import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { ArrowRight, ChevronDown, ChevronUp, UploadCloud, X } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { api, type Job } from "@/api/client";
-import { JobList } from "@/components/JobList";
+import { formatBytes, JobList } from "@/components/JobList";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -21,8 +22,14 @@ export function JobsPage({ feed }: { feed: JobFeed }) {
   const { t } = useTranslation();
   const describe = useApiErrorMessage();
   const input = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
 
+  const [batch, setBatch] = useState(false);
+  const [picked, setPicked] = useState<File[]>([]);
+  const [merge, setMerge] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
+  /** Only the many-jobs route can be partly done, so only it counts. */
+  const [sent, setSent] = useState<{ done: number; total: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [url, setUrl] = useState("");
   const [adding, setAdding] = useState(false);
@@ -38,16 +45,54 @@ export function JobsPage({ feed }: { feed: JobFeed }) {
     void api.setupStatus().then((status) => setHasDiarizer(status.has_diarizer));
   }, []);
 
-  const upload = async (file: File) => {
+  /** Straight to the recording that was just made: the page that answers for it
+   *  now shows the work as well as the words, so there is nowhere better. */
+  const openJob = (job: Job) => navigate(`/jobs/${job.id}`);
+
+  const uploadOne = async (file: File) => {
     setUploading(file.name);
     setError(null);
     try {
-      await api.uploadJob(file, diarize);
-      await feed.refresh();
+      openJob(await api.uploadJob(file, diarize));
     } catch (cause) {
       setError(describe(cause));
     } finally {
       setUploading(null);
+    }
+  };
+
+  /** The whole pile at once: one recording out of all of it, or one job each. */
+  const startBatch = async () => {
+    if (picked.length === 0) return;
+    setError(null);
+
+    if (merge) {
+      setUploading(t("jobs.mergedName", { total: picked.length }));
+      try {
+        openJob(await api.uploadJob(picked, diarize));
+        setPicked([]);
+      } catch (cause) {
+        setError(describe(cause));
+      } finally {
+        setUploading(null);
+      }
+      return;
+    }
+
+    // Sequential rather than parallel: the browser would open them all at once
+    // and a queue of large files would compete with itself for the uplink.
+    setSent({ done: 0, total: picked.length });
+    try {
+      for (const [index, file] of picked.entries()) {
+        await api.uploadJob(file, diarize);
+        setSent({ done: index + 1, total: picked.length });
+      }
+      setPicked([]);
+    } catch (cause) {
+      setError(describe(cause));
+    } finally {
+      setSent(null);
+      await feed.refresh();
     }
   };
 
@@ -56,9 +101,9 @@ export function JobsPage({ feed }: { feed: JobFeed }) {
     setAdding(true);
     setError(null);
     try {
-      await api.addUrlJob(url.trim(), diarize);
+      const job = await api.addUrlJob(url.trim(), diarize);
       setUrl("");
-      await feed.refresh();
+      openJob(job);
     } catch (cause) {
       setError(describe(cause));
     } finally {
@@ -75,16 +120,47 @@ export function JobsPage({ feed }: { feed: JobFeed }) {
     }
   };
 
-  const onDrop = (event: DragEvent) => {
-    event.preventDefault();
-    setDragging(false);
-    const file = event.dataTransfer.files[0];
-    if (file) void upload(file);
+  const accept = (files: FileList | null) => {
+    const chosen = Array.from(files ?? []);
+    if (chosen.length === 0) return;
+    if (batch) setPicked((held) => [...held, ...chosen]);
+    else void uploadOne(chosen[0]);
   };
+
+  const move = (from: number, to: number) =>
+    setPicked((held) => {
+      if (to < 0 || to >= held.length) return held;
+      const next = [...held];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+
+  const busy = uploading !== null || sent !== null;
 
   return (
     <div className="grid gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">{t("jobs.title")}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">{t("jobs.title")}</h1>
+
+        {/* Two buttons rather than a control we do not otherwise own: the choice
+            is binary and it changes what the drop zone below means. */}
+        <div className="flex rounded-lg border border-border p-0.5">
+          {[false, true].map((wanted) => (
+            <Button
+              key={String(wanted)}
+              size="sm"
+              variant={batch === wanted ? "secondary" : "ghost"}
+              onClick={() => {
+                setBatch(wanted);
+                setPicked([]);
+              }}
+            >
+              {t(wanted ? "jobs.mode.batch" : "jobs.mode.single")}
+            </Button>
+          ))}
+        </div>
+      </div>
 
       {!hasProvider && (
         <Alert variant="warning">
@@ -107,7 +183,11 @@ export function JobsPage({ feed }: { feed: JobFeed }) {
       <button
         type="button"
         onClick={() => input.current?.click()}
-        onDrop={onDrop}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          accept(event.dataTransfer.files);
+        }}
         onDragOver={(event) => {
           event.preventDefault();
           setDragging(true);
@@ -121,21 +201,100 @@ export function JobsPage({ feed }: { feed: JobFeed }) {
       >
         <UploadCloud className="size-9 text-muted-foreground" />
         <span className="text-sm text-muted-foreground">
-          {uploading ? t("jobs.uploading", { name: uploading }) : t("jobs.drop")}
+          {uploading
+            ? t("jobs.uploading", { name: uploading })
+            : sent
+              ? t("jobs.uploadingCount", sent)
+              : t(batch ? "jobs.dropMany" : "jobs.drop")}
         </span>
-        {uploading && <Progress className="w-56" indeterminate />}
+        {busy && <Progress className="w-56" indeterminate={sent === null} value={progressOf(sent)} />}
         <input
           ref={input}
           type="file"
           hidden
+          multiple={batch}
           accept="audio/*,video/*"
           onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) void upload(file);
+            accept(event.target.files);
             event.target.value = "";
           }}
         />
       </button>
+
+      {batch && picked.length > 0 && (
+        <Card className="gap-0 overflow-hidden p-0">
+          {picked.map((file, index) => (
+            <div
+              key={`${file.name}-${index}`}
+              className={cn(
+                "flex items-center gap-3 px-4 py-2",
+                index > 0 && "border-t border-border",
+              )}
+            >
+              {/* The number is the point of this list: with everything going into
+                  one recording, position is the only thing that is being chosen. */}
+              <span className="w-5 shrink-0 text-sm tabular-nums text-muted-foreground">
+                {index + 1}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm">{file.name}</span>
+              <span className="shrink-0 text-sm text-muted-foreground">
+                {formatBytes(file.size)}
+              </span>
+              {merge && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("jobs.moveUp")}
+                    disabled={index === 0}
+                    onClick={() => move(index, index - 1)}
+                  >
+                    <ChevronUp className="size-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("jobs.moveDown")}
+                    disabled={index === picked.length - 1}
+                    onClick={() => move(index, index + 1)}
+                  >
+                    <ChevronDown className="size-4" />
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("jobs.remove")}
+                onClick={() => setPicked((held) => held.filter((_, at) => at !== index))}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {batch && (
+        <div className="grid gap-3">
+          <div className="flex items-center gap-3">
+            <Switch id="merge" checked={merge} onCheckedChange={setMerge} />
+            <Label htmlFor="merge" className="text-sm font-normal">
+              {t("jobs.merge")}
+            </Label>
+            <span className="text-sm text-muted-foreground">
+              {t(merge ? "jobs.mergeHint" : "jobs.separateHint")}
+            </span>
+          </div>
+          <Button
+            className="justify-self-start"
+            disabled={busy || picked.length === 0}
+            onClick={() => void startBatch()}
+          >
+            {t("jobs.start", { total: picked.length })}
+          </Button>
+        </div>
+      )}
 
       <form onSubmit={addUrl} className="flex gap-2">
         <Input
@@ -181,4 +340,8 @@ export function JobsPage({ feed }: { feed: JobFeed }) {
         ))}
     </div>
   );
+}
+
+function progressOf(sent: { done: number; total: number } | null): number | undefined {
+  return sent === null ? undefined : (sent.done / sent.total) * 100;
 }

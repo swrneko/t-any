@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -183,6 +184,57 @@ async def normalize_to_opus(source: Path, target: Path) -> MediaInfo:
             422,
             "normalisation_failed",
             "ffmpeg could not convert this file.",
+            detail=stderr.decode(errors="replace").strip()[:500],
+        )
+
+    return await probe(target)
+
+
+async def join_to_opus(sources: Sequence[Path], target: Path) -> MediaInfo:
+    """Several files, in the order given, as one recording.
+
+    The concat filter rather than the concat demuxer: the parts may have been
+    recorded on different devices, and the filter decodes each of them before
+    joining, so mismatched sample rates and codecs cost nothing but time. The
+    demuxer would refuse them, or worse, produce a file whose timestamps drift.
+    """
+    if len(sources) == 1:
+        return await normalize_to_opus(sources[0], target)
+
+    for source in sources:
+        if not (await probe(source)).has_audio:
+            raise ApiError(
+                422,
+                "no_audio_stream",
+                "This file has no audio track to transcribe.",
+                filename=source.name,
+            )
+
+    inputs: list[str] = []
+    for source in sources:
+        inputs += ["-i", str(source)]
+    streams = "".join(f"[{index}:a:0]" for index in range(len(sources)))
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    code, _, stderr = await run(
+        FFMPEG,
+        "-hide_banner", "-loglevel", "error", "-nostdin",
+        *inputs,
+        "-filter_complex", f"{streams}concat=n={len(sources)}:v=0:a=1[out]",
+        "-map", "[out]",
+        "-ac", "1",
+        "-ar", str(TARGET_SAMPLE_RATE),
+        "-c:a", "libopus",
+        "-b:a", TARGET_BITRATE,
+        "-application", "voip",
+        "-y", str(target),
+    )
+    if code != 0:
+        target.unlink(missing_ok=True)
+        raise ApiError(
+            422,
+            "normalisation_failed",
+            "ffmpeg could not join these files.",
             detail=stderr.decode(errors="replace").strip()[:500],
         )
 

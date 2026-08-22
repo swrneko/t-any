@@ -55,13 +55,12 @@ export function JobList({
         <div
           key={job.id}
           className={cn(
-            "flex items-center gap-3 px-4 py-3",
+            "flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-accent/50",
             index > 0 && "border-t border-border",
-            job.status === "done" && "cursor-pointer hover:bg-accent/50",
           )}
-          onClick={() => {
-            if (job.status === "done") navigate(`/jobs/${job.id}`);
-          }}
+          // Every row, not only the finished ones: the job's own page reports
+          // the work while it happens and the words once it is over.
+          onClick={() => navigate(`/jobs/${job.id}`)}
         >
           {onSelect && (
             <Checkbox

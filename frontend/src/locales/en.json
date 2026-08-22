@@ -64,7 +64,21 @@
     "diarize": "Identify speakers",
     "diarizeHint": "Slower, and only worth it for a conversation.",
     "openProviders": "Open providers",
-    "inHistory": "{{total}} in the archive"
+    "inHistory": "{{total}} in the archive",
+    "mode": {
+      "single": "One recording",
+      "batch": "Several files"
+    },
+    "dropMany": "Drop files here, or click to choose",
+    "mergedName": "{{total}} files as one recording",
+    "uploadingCount": "Uploading {{done}} of {{total}}…",
+    "merge": "Join into one recording",
+    "mergeHint": "One transcript; the parts follow the order of the list.",
+    "separateHint": "Every file becomes a recording of its own.",
+    "start": "Start ({{total}})",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "remove": "Remove from the list"
   },
   "transcript": {
     "back": "To the archive",
@@ -78,7 +92,8 @@
     "rename": "Rename",
     "correct": "Correct this line",
     "corrected": "Corrected — clear the box to restore the original",
-    "audioGone": "The recording was removed to free space; the words stayed."
+    "audioGone": "The recording was removed to free space; the words stayed.",
+    "working": "This page updates itself when the transcript is ready."
   },
   "errors": {
     "setup_already_completed": "Setup has already been completed. Ask an administrator for an account.",

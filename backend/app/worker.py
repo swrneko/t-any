@@ -20,7 +20,7 @@ from app.db import Database
 from app.diarize import DiarizerClient, assign_speakers, diarizer_http_client
 from app.errors import ApiError
 from app.llm import llm_http_client
-from app.media import detect_silences, extract_chunk, normalize_to_opus, probe
+from app.media import detect_silences, extract_chunk, join_to_opus, probe
 from app.models import Job, Provider, Segment, Speaker, Summary, Transcript, utcnow
 from app.retention import sweep as sweep_expired
 from app.webhooks import read_webhook
@@ -460,15 +460,16 @@ class Worker:
         if audio.is_file():
             info = await probe(audio)
         else:
-            source = await self._acquire_source(session, job)
+            sources = await self._acquire_source(session, job)
             # ffmpeg reports its own progress on stderr and we do not read it;
             # what the stage buys here is the difference between "stuck" and
             # "converting a two-hour video", which is most of the question.
             await self._enter(session, job, "converting")
-            info = await normalize_to_opus(source, audio)
-            # The original goes the moment we no longer need it. Keeping video
+            info = await join_to_opus(sources, audio)
+            # The originals go the moment we no longer need them. Keeping video
             # around fills a home server's disk inside a week.
-            source.unlink(missing_ok=True)
+            for source in sources:
+                source.unlink(missing_ok=True)
 
         job.duration_sec = info.duration_sec
 
@@ -710,15 +711,18 @@ class Worker:
 
         return report
 
-    async def _acquire_source(self, session: AsyncSession, job: Job) -> Path:
+    async def _acquire_source(self, session: AsyncSession, job: Job) -> list[Path]:
         """Put the original media on disk, whatever it took to get there.
 
         An upload is already here; a link is not. Fetching happens in the worker
         and never in the request: a two-hour recording would keep an HTTP
         connection open for the length of the download and lose the job with it.
+
+        A list because an upload can be several files at once. A link is always
+        one, so it comes back as a list of one rather than as its own shape.
         """
         if job.source_type == "upload":
-            return self._find_source(job)
+            return self._find_sources(job)
 
         await self._enter(session, job, "fetching")
         workspace = self.settings.tmp_dir / str(job.id)
@@ -731,14 +735,16 @@ class Worker:
 
         if job.source_type == "remote_url":
             async with self._download_factory() as http:
-                return await download_media(
-                    http,
-                    job.source_ref,
-                    workspace,
-                    self.settings.max_upload_size,
-                    allow_private=allow_private,
-                    on_progress=self._downloaded(session, job),
-                )
+                return [
+                    await download_media(
+                        http,
+                        job.source_ref,
+                        workspace,
+                        self.settings.max_upload_size,
+                        allow_private=allow_private,
+                        on_progress=self._downloaded(session, job),
+                    )
+                ]
 
         # Checked again here, not only at submission: the answer a name gives can
         # change between the two, and the worker is the one that opens the socket.
@@ -757,9 +763,14 @@ class Worker:
             # one volume the container mounts.
             fetched.thumbnail.replace(keep)
             job.has_thumbnail = True
-        return fetched.path
+        return [fetched.path]
 
-    def _find_source(self, job: Job) -> Path:
+    def _find_sources(self, job: Job) -> list[Path]:
+        """The parts of an upload, in the order they were sent.
+
+        Sorted by name, which is why the API numbers them: the filesystem has no
+        opinion about which card of a meeting came first.
+        """
         workspace = self.settings.tmp_dir / str(job.id)
         candidates = sorted(workspace.glob("source*")) if workspace.is_dir() else []
         if not candidates:
@@ -769,7 +780,7 @@ class Worker:
                 "The uploaded file is no longer on disk.",
                 job_id=str(job.id),
             )
-        return candidates[0]
+        return candidates
 
     async def _resolve_stt(self, session: AsyncSession, job: Job) -> tuple[Provider, str]:
         provider = await session.scalar(

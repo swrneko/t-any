@@ -88,3 +88,28 @@ async def test_uploading_requires_a_session(client: AsyncClient, sample_audio: P
         )
 
     assert response.status_code == 401
+
+
+async def test_several_files_become_one_recording(
+    client: AsyncClient, admin: dict[str, str], sample_audio: Path
+) -> None:
+    """Parts of one meeting, handed over together.
+
+    A recording split across three cards is one recording; asking for three
+    transcripts and stitching them by hand is what this saves.
+    """
+    await client.post("/api/auth/login", json=admin)
+
+    with sample_audio.open("rb") as first, sample_audio.open("rb") as second:
+        response = await client.post(
+            "/api/jobs",
+            files=[
+                ("file", ("part-one.wav", first, "audio/wav")),
+                ("file", ("part-two.wav", second, "audio/wav")),
+            ],
+        )
+
+    assert response.status_code == 201
+    job = response.json()
+    assert job["title"] == "part-one.wav +1"
+    assert job["source_ref"] == "part-one.wav, part-two.wav"

@@ -18,11 +18,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { displayLanguage } from "@/lib/language";
 import { cn } from "@/lib/utils";
-import { useApiErrorMessage } from "@/useApiError";
+import { useApiErrorMessage, useCodeMessage } from "@/useApiError";
+import { isPending } from "@/useJobFeed";
 
 export function TranscriptPage() {
   const { jobId = "" } = useParams();
@@ -56,16 +58,27 @@ export function TranscriptPage() {
     }
   };
 
+  // The job first, on its own: a recording queued a second ago has no
+  // transcript, and asking for one would turn "still working" into an error.
   useEffect(() => {
-    Promise.all([api.readJob(jobId), api.readTranscript(jobId)])
-      .then(([loadedJob, loadedTranscript]) => {
-        setJob(loadedJob);
-        setTranscript(loadedTranscript);
-      })
-      .catch((cause: unknown) => setError(describe(cause)));
+    setJob(null);
+    setTranscript(null);
+    api.readJob(jobId).then(setJob).catch((cause: unknown) => setError(describe(cause)));
     // describe is rebuilt on every language change; refetching then is waste.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
+
+  const working = job !== null && isPending(job);
+  useEffect(() => {
+    if (!working) return;
+    return api.watchJob(jobId, setJob);
+  }, [jobId, working]);
+
+  useEffect(() => {
+    if (job?.status !== "done" || transcript) return;
+    api.readTranscript(jobId).then(setTranscript).catch((cause: unknown) => setError(describe(cause)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, job?.status]);
 
   // A search result links to the moment it found, not just to the recording.
   const at = Number(params.get("at") ?? Number.NaN);
@@ -93,10 +106,21 @@ export function TranscriptPage() {
     );
   }
 
-  if (!job || !transcript) {
+  if (!job) {
     return (
       <div className="grid place-items-center py-16">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Opened the moment the upload finished, so the recording is usually still
+  // being worked on. The same address answers for both halves of its life.
+  if (!transcript) {
+    return (
+      <div className="grid gap-4">
+        <BackLink />
+        <JobProgress job={job} onCancel={() => void api.cancelJob(job.id).then(setJob)} />
       </div>
     );
   }
@@ -286,6 +310,43 @@ export function TranscriptPage() {
 
       <SummaryPanel jobId={job.id} />
     </div>
+  );
+}
+
+/** The recording as it is being made: what is happening to it, how far that has
+ *  got, and the one button that stops it. */
+function JobProgress({ job, onCancel }: { job: Job; onCancel: () => void }) {
+  const { t } = useTranslation();
+  const describeCode = useCodeMessage();
+
+  return (
+    <Card className="gap-4 p-6">
+      <h1 className="text-2xl font-semibold tracking-tight">{job.title}</h1>
+
+      {job.status === "failed" ? (
+        <Alert variant="destructive">
+          <AlertDescription>{describeCode(job.error_code, job.error_params)}</AlertDescription>
+        </Alert>
+      ) : job.status === "cancelled" ? (
+        <p className="text-sm text-muted-foreground">{t("jobs.status.cancelled")}</p>
+      ) : (
+        <>
+          <div className="flex items-center gap-3">
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">
+              {job.stage ? t(`jobs.stage.${job.stage}`) : t(`jobs.status.${job.status}`)}
+            </span>
+          </div>
+          <Progress value={job.progress * 100} indeterminate={job.progress === 0} />
+          <p className="text-sm text-muted-foreground">{t("transcript.working")}</p>
+          {job.status !== "cancelling" && (
+            <Button variant="outline" size="sm" className="justify-self-start" onClick={onCancel}>
+              {t("jobs.cancel")}
+            </Button>
+          )}
+        </>
+      )}
+    </Card>
   );
 }
 

@@ -294,9 +294,11 @@ export const api = {
 
   readTranscript: (id: string) => request<Transcript>(`/api/jobs/${id}/transcript`),
 
-  uploadJob: (file: File, diarize = false) => {
+  /** One recording. Several files make one transcript, joined in the order
+   *  they are given -- for a meeting that arrived split across cards. */
+  uploadJob: (files: File | File[], diarize = false) => {
     const body = new FormData();
-    body.append("file", file);
+    for (const file of Array.isArray(files) ? files : [files]) body.append("file", file);
     body.append("diarize", String(diarize));
     // No Content-Type header: the browser has to set the multipart boundary.
     return request<Job>("/api/jobs", { method: "POST", body });
@@ -347,6 +349,15 @@ export const api = {
     source.onmessage = (event) => onJobs(JSON.parse(event.data) as Job[]);
     // The server closes the stream once everything is terminal; EventSource
     // would reconnect forever, so close it on the way out.
+    source.onerror = () => source.close();
+    return () => source.close();
+  },
+
+  /** Follow one job. The list stream answers "what is happening"; this answers
+   *  "what is happening to this recording", which is a different page. */
+  watchJob: (id: string, onJob: (job: Job) => void): (() => void) => {
+    const source = new EventSource(`/api/jobs/${id}/events`);
+    source.onmessage = (event) => onJob(JSON.parse(event.data) as Job);
     source.onerror = () => source.close();
     return () => source.close();
   },
