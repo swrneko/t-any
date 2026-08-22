@@ -80,6 +80,27 @@ async def test_the_language_from_the_first_chunk_is_forced_on_the_rest(
     assert [call.fields.get("language") for call in stub.calls[1:]] == ["en", "en"]
 
 
+async def test_a_spelled_out_language_is_forced_as_a_code(
+    tmp_path: Path, sample_audio: Path
+) -> None:
+    """A cloud endpoint answers `English`, which cannot be sent back as an
+    input: forcing it would be forcing nothing, quietly."""
+    settings = chunking_settings(tmp_path)
+
+    def spelled_out(index: int) -> dict[str, Any]:
+        return {**one_segment_per_chunk(index), "language": "English"}
+
+    stub = SttStub(payload_for=spelled_out)
+
+    async with running_client(settings) as client:
+        job = await upload(client, sample_audio)
+        await run_worker_once(settings, stub)
+        finished = (await client.get(f"/api/jobs/{job['id']}")).json()
+
+    assert [call.fields.get("language") for call in stub.calls[1:]] == ["en", "en"]
+    assert finished["language"] == "en"
+
+
 async def test_chunking_can_be_switched_off(tmp_path: Path, sample_audio: Path) -> None:
     settings = chunking_settings(tmp_path).model_copy(update={"stt_chunking": "never"})
     stub = SttStub(payload_for=one_segment_per_chunk)

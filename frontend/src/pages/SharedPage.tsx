@@ -9,6 +9,7 @@ import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card } from "@/components/ui/card";
+import { displayLanguage } from "@/lib/language";
 import { cn } from "@/lib/utils";
 import { useApiErrorMessage } from "@/useApiError";
 
@@ -79,7 +80,7 @@ export function SharedPage() {
                     transcript.published_on
                       ? new Date(transcript.published_on).toLocaleDateString(i18n.language)
                       : null,
-                    transcript.language,
+                    displayLanguage(transcript.language, i18n.language),
                   ]
                     .filter(Boolean)
                     .join(" · ")}

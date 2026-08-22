@@ -20,13 +20,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { displayLanguage } from "@/lib/language";
 import { cn } from "@/lib/utils";
 import { useApiErrorMessage } from "@/useApiError";
 
 export function TranscriptPage() {
   const { jobId = "" } = useParams();
   const [params] = useSearchParams();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const describe = useApiErrorMessage();
   const player = useRef<HTMLAudioElement>(null);
 
@@ -117,7 +118,9 @@ export function TranscriptPage() {
           <h1 className="text-2xl font-semibold tracking-tight">{job.title}</h1>
           {transcript.language && (
             <p className="text-sm text-muted-foreground">
-              {t("transcript.language", { language: transcript.language })}
+              {t("transcript.language", {
+                language: displayLanguage(transcript.language, i18n.language),
+              })}
             </p>
           )}
         </div>

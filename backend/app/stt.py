@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from app.errors import ApiError
+from app.languages import normalize_language
 
 DEFAULT_TIMEOUT = httpx.Timeout(connect=10.0, read=900.0, write=300.0, pool=10.0)
 
@@ -115,7 +116,9 @@ def _parse(payload: dict[str, Any]) -> Transcription:
         segments = [Segment(start=0.0, end=float(payload.get("duration") or 0.0), text=text)]
 
     return Transcription(
-        language=payload.get("language"),
+        # Normalised here rather than where it is used: this is the boundary the
+        # provider's wording arrives at, and `raw` keeps it verbatim anyway.
+        language=normalize_language(payload.get("language")),
         text=text,
         segments=segments,
         raw=payload,

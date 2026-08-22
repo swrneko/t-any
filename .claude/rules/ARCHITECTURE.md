@@ -62,6 +62,7 @@ them readable in order.
 │   │   ├── retention.py        removing a recording, by hand or by policy
 │   │   ├── webhooks.py         the stored address a finished job is announced to
 │   │   ├── stt.py              OpenAI transcription protocol client
+│   │   ├── languages.py        what a provider calls a language vs what it takes
 │   │   ├── llm.py              OpenAI chat protocol client, plain and streamed
 │   │   ├── diarize.py          the diariser's own protocol, and the overlap merge
 │   │   ├── exports.py          txt/md/srt/vtt rendering, pure and on demand
@@ -83,6 +84,7 @@ them readable in order.
     ├── i18n.ts + locales/      en, ru
     ├── useApiError.ts          error code -> translated message
     ├── lib/utils.ts            cn(), the only thing shadcn needs from us
+    ├── lib/language.ts         a code from the API -> a name in the UI's language
     ├── useJobFeed.ts           one job feed above the router: queue vs archive
     ├── components/ui/          shadcn components, owned and editable
     ├── components/             AppShell, AuthLayout, Field, JobList, ExportMenu,
@@ -201,11 +203,11 @@ Known gaps left deliberately open:
 - The connection test asks `/v1/models`, which is part of the OpenAI surface
   but not universal: a server that does not implement it looks unreachable
   while working perfectly. The wording in the UI says so; nothing else can.
-- `language` comes back from the provider verbatim and is fed straight back to
-  later chunks. OpenAI answers `english` where faster-whisper answers `en`, and
-  only the second form is a valid input. Against a cloud endpoint this silently
-  weakens the forcing rather than breaking it, so it needs a normalising table
-  before the provider list widens.
+- The language table is whisper's own list of ninety-nine, so a provider that
+  answers with something outside it -- a script subtag we do not split on, a
+  language whisper never had -- is passed through verbatim rather than
+  translated. Forcing an unknown string is what happened before the table
+  existed, so nothing is worse for it, but nothing is better either.
 - A correction is per line and has no history: the provider's words and the
   current correction, nothing between them. Who changed what, and when, is not
   recorded -- an instance with two people editing one transcript would want it.
