@@ -170,19 +170,54 @@ class Worker:
         async with self.database.session_factory() as session:
             summary = await session.get(Summary, summary_id)
             assert summary is not None
+            working = asyncio.create_task(
+                SummaryRunner(self.settings, session, self._llm_factory).run(summary)
+            )
+            watcher = asyncio.create_task(self._watch_summary(summary_id, working))
             try:
-                await SummaryRunner(self.settings, session, self._llm_factory).run(summary)
+                await working
                 summary.status = "done"
+            except asyncio.CancelledError:
+                # Stopped from the UI. The session was interrupted mid-request,
+                # so the row is finished with a plain UPDATE rather than through
+                # an instance the rollback has expired.
+                watcher.cancel()
+                await session.rollback()
+                await session.execute(
+                    update(Summary)
+                    .where(Summary.id == summary_id)
+                    .values(status="cancelled", finished_at=utcnow(), worker_id=None)
+                )
+                await session.commit()
+                return True
             except ApiError as failure:
                 log.warning("summary %s failed: %s", summary.id, failure.message)
                 summary.status = "failed"
                 summary.error_code = failure.code
                 summary.error_message = failure.message
                 summary.error_params = json.dumps(failure.params)
+            finally:
+                watcher.cancel()
             summary.finished_at = utcnow()
             await session.commit()
 
         return True
+
+    async def _watch_summary(self, summary_id: object, working: asyncio.Task[None]) -> None:
+        """Keep the heartbeat fresh, and drop the request when a stop arrives."""
+        while True:
+            await asyncio.sleep(self.settings.cancel_poll_seconds)
+            async with self.database.session_factory() as session:
+                status = await session.scalar(
+                    select(Summary.status).where(Summary.id == summary_id)
+                )
+                if status == "cancelling":
+                    working.cancel()
+                    return
+                await session.execute(
+                    update(Summary).where(Summary.id == summary_id).values(heartbeat_at=utcnow())
+                )
+                await session.commit()
 
     async def _claim_summary(self) -> object | None:
         now = utcnow()

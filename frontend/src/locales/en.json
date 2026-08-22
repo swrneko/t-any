@@ -140,13 +140,18 @@
     "accounts_are_external": "Accounts come from outside this service in this mode.",
     "no_webhook": "There is no address to call yet.",
     "webhook_unreachable": "Nothing answered at that address.",
-    "webhook_rejected": "The receiver answered {{status}}."
+    "webhook_rejected": "The receiver answered {{status}}.",
+    "summary_not_cancellable": "That summary is already finished.",
+    "summary_not_retryable": "That summary finished — ask for a new one instead."
   },
   "summary": {
     "title": "Summaries",
     "preset": "Preset",
     "run": "Summarise",
-    "empty": "No summaries yet. Pick a preset and run one."
+    "empty": "No summaries yet. Pick a preset and run one.",
+    "cancel": "Stop",
+    "retry": "Try again",
+    "cancelled": "Stopped before it finished."
   },
   "presets": {
     "title": "Presets",

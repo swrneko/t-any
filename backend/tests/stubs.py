@@ -220,9 +220,19 @@ class LlmStub:
         reply_for: Callable[[int], str] | None = None,
         status: int = 200,
         models: list[str] | None = None,
+        hold: asyncio.Event | None = None,
+        status_for: Callable[[int], int] | None = None,
+        fail_stream: bool = False,
     ) -> None:
         self._reply_for = reply_for or (lambda index: f"summary {index}")
         self.status = status
+        self._status_for = status_for or (lambda _index: status)
+        # When set, the handler blocks until released -- lets a test cancel a
+        # summary while the model is genuinely mid-answer.
+        self._hold = hold
+        # Map answers, then a broken reduce: the shape a local model fails in.
+        self._fail_stream = fail_stream
+        self.received = asyncio.Event()
         self.calls: list[RecordedCompletion] = []
         self.authorizations: list[str | None] = []
         self.app = FastAPI()
@@ -236,6 +246,7 @@ class LlmStub:
         async def completions(request: Request) -> Response:
             body = await request.json()
             index = len(self.calls)
+            streaming = bool(body.get("stream"))
             messages = {message["role"]: message["content"] for message in body["messages"]}
             self.calls.append(
                 RecordedCompletion(
@@ -247,8 +258,15 @@ class LlmStub:
                 )
             )
 
-            if self.status >= 400:
-                return JSONResponse({"error": "nope"}, status_code=self.status)
+            self.received.set()
+            if self._hold is not None:
+                await self._hold.wait()
+
+            status = self._status_for(index)
+            if streaming and self._fail_stream:
+                return JSONResponse({"error": "nope"}, status_code=500)
+            if status >= 400:
+                return JSONResponse({"error": "nope"}, status_code=status)
 
             reply = self._reply_for(index)
             if not body.get("stream"):

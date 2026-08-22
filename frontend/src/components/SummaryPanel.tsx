@@ -1,4 +1,4 @@
-import { Copy, Sparkles, Trash2 } from "lucide-react";
+import { Copy, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -74,6 +74,16 @@ export function SummaryPanel({ jobId }: { jobId: string }) {
     await refresh();
   };
 
+  const act = async (work: Promise<Summary>) => {
+    setError(null);
+    try {
+      await work;
+      await refresh();
+    } catch (cause) {
+      setError(describe(cause));
+    }
+  };
+
   const copy = async (summary: Summary) => {
     await navigator.clipboard.writeText(summary.content);
     setCopied(summary.id);
@@ -142,6 +152,31 @@ export function SummaryPanel({ jobId }: { jobId: string }) {
             </div>
 
             <div className="flex gap-1">
+              {/* Stop is offered while there is something to stop, and asking
+                  again only where a result is missing: a finished summary is
+                  kept, and wanting another means asking for another. */}
+              {!TERMINAL_STATUSES.includes(summary.status) && summary.status !== "cancelling" && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t("summary.cancel")}
+                  title={t("summary.cancel")}
+                  onClick={() => void act(api.cancelSummary(summary.id))}
+                >
+                  <X className="size-4" />
+                </Button>
+              )}
+              {(summary.status === "failed" || summary.status === "cancelled") && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t("summary.retry")}
+                  title={t("summary.retry")}
+                  onClick={() => void act(api.retrySummary(summary.id))}
+                >
+                  <RotateCcw className="size-4" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -161,7 +196,9 @@ export function SummaryPanel({ jobId }: { jobId: string }) {
             </div>
           </div>
 
-          {summary.status === "failed" ? (
+          {summary.status === "cancelled" ? (
+            <p className="text-sm text-muted-foreground">{t("summary.cancelled")}</p>
+          ) : summary.status === "failed" ? (
             <Alert variant="destructive">
               <AlertDescription>
                 {describeCode(summary.error_code, summary.error_params)}

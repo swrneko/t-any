@@ -60,8 +60,11 @@ class SummaryRunner:
                 )
                 return
 
-            partials: list[str] = []
+            partials = _kept_partials(summary, len(parts))
             for index, part in enumerate(parts):
+                if index < len(partials):
+                    # Already answered by an attempt that failed later on.
+                    continue
                 partials.append(
                     await client.complete(
                         model=model,
@@ -157,3 +160,21 @@ class SummaryRunner:
             )
 
         return provider, model, provider.context_tokens or self.settings.llm_context_tokens
+
+
+def _kept_partials(summary: Summary, expected: int) -> list[str]:
+    """Map results a previous attempt got back, when they still apply.
+
+    Retrying a summary that died in the reduce step should not re-ask the model
+    about seventeen parts it has already read. More parts than the plan now has
+    means the transcript changed underneath, and the lot is thrown away.
+    """
+    if not summary.partials_json:
+        return []
+    try:
+        stored = json.loads(summary.partials_json)
+    except ValueError:
+        return []
+    if not isinstance(stored, list) or len(stored) > expected:
+        return []
+    return [str(item) for item in stored]

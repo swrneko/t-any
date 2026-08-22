@@ -183,8 +183,9 @@ Known gaps left deliberately open:
 - Nothing checks that the diariser is reachable before a job is queued: the
   `has_diarizer` flag says a URL is configured, not that anything answers it.
 
-- Summaries have no cancel button and no retry. The transcription path has
-  both; the summary path does not, and a stuck summary needs deleting.
+- A retry reuses the map results a previous attempt got back, matched only by
+  count. Correcting the transcript between two attempts leaves the earlier
+  parts summarising the older wording; the reduce still sees them.
 - The token estimate is characters divided by three, not a tokeniser. It is
   deliberately pessimistic, so it splits earlier than strictly necessary.
 

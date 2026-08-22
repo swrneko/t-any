@@ -467,6 +467,12 @@ export const api = {
 
   deleteSummary: (id: string) => request<void>(`/api/summaries/${id}`, { method: "DELETE" }),
 
+  /** Queued: stopped at once. Running: the worker drops the request in flight. */
+  cancelSummary: (id: string) => request<Summary>(`/api/summaries/${id}/cancel`, { method: "POST" }),
+
+  /** The same preset again, in place, keeping whatever parts already came back. */
+  retrySummary: (id: string) => request<Summary>(`/api/summaries/${id}/retry`, { method: "POST" }),
+
   /** Follow one summary as the worker writes it. */
   watchSummary: (id: string, onSummary: (summary: Summary) => void): (() => void) => {
     const source = new EventSource(`/api/summaries/${id}/events`);
