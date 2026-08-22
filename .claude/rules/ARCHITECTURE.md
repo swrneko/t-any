@@ -4,8 +4,9 @@
 
 - **Backend** — Python 3.14, FastAPI, SQLAlchemy 2.0 async, SQLite in WAL mode,
   Alembic, argon2 for passwords, Fernet for provider API keys.
-- **Frontend** — Vite + React 19 + TypeScript, MUI with a hand-built Material 3
-  theme, i18next (en/ru). Compiles to static files served by FastAPI itself.
+- **Frontend** — Vite + React 19 + TypeScript, Tailwind v4 and shadcn/ui with a
+  tweakcn theme, i18next (en/ru). Compiles to static files served by FastAPI
+  itself.
 - **Media** — ffmpeg. No ML library is installed anywhere in this repository;
   speech-to-text and summarisation are remote OpenAI-compatible services.
 - **Packaging** — one Docker image, one `/data` volume, one compose file.
@@ -20,6 +21,7 @@
 | UI (dev) | `frontend/` | `npm run dev` |
 | Typecheck UI | `frontend/` | `npm run typecheck` |
 | Image | root | `docker build -t tany:dev .` |
+| Diariser | root | `docker compose --profile diarize up -d --build` |
 | New migration | `backend/` | `DATA_DIR=/tmp/x uv run alembic revision -m "..." --autogenerate` |
 
 Alembic needs `DATA_DIR` because it migrates whichever database the settings
@@ -34,6 +36,7 @@ them readable in order.
 ├── Dockerfile                  multi-stage: node builds the SPA, python runs it
 ├── docker-compose.yml          published image; .dev.yml overrides with build
 ├── SPEC.md                     design decisions with rationale (Russian)
+├── diarizer/                   the only image with an ML library; profile "diarize"
 ├── backend/
 │   ├── app/
 │   │   ├── main.py             app factory + lifespan (migrations, db, secret)
@@ -51,32 +54,43 @@ them readable in order.
 │   │   ├── crypto.py           Fernet encryption and masking for API keys
 │   │   ├── seed.py             env -> database bootstrap for providers
 │   │   ├── storage.py          streaming upload to disk with SHA-256
+│   │   ├── sources.py          link -> file: httpx for media, yt-dlp for pages
 │   │   ├── media.py            ffprobe and ffmpeg; the only media knowledge
 │   │   ├── stt.py              OpenAI transcription protocol client
 │   │   ├── llm.py              OpenAI chat protocol client, plain and streamed
+│   │   ├── diarize.py          the diariser's own protocol, and the overlap merge
+│   │   ├── exports.py          txt/md/srt/vtt rendering, pure and on demand
+│   │   ├── search.py           FTS5 query building and the snippet contract
 │   │   ├── chunking.py         where to cut a long recording
 │   │   ├── summarize.py        token budget and map-reduce splitting
 │   │   ├── summary_runner.py   produces one summary, in one pass or in stages
 │   │   ├── presets.py          the built-in prompts
 │   │   ├── worker.py           claim loop; also the worker entrypoint
 │   │   └── api/                health, setup, auth, jobs, providers, presets,
-│   │                           summaries
+│   │                           summaries, search, tokens, public (no session)
 │   ├── migrations/             alembic
 │   └── tests/                  pytest, async, real HTTP through ASGITransport
 │       └── stubs.py            stand-in STT server (a stub, never a patch)
 └── frontend/src/
     ├── api/client.ts           fetch wrapper, throws ApiError with a code
-    ├── theme.ts                M3 palette generated from one seed colour
+    ├── index.css               the whole theme: two oklch palettes, one import
     ├── i18n.ts + locales/      en, ru
     ├── useApiError.ts          error code -> translated message
-    ├── components/             AppShell, AuthLayout, LanguageSwitch
-    └── pages/                  Setup, Login, Jobs, Transcript
+    ├── lib/utils.ts            cn(), the only thing shadcn needs from us
+    ├── components/ui/          shadcn components, owned and editable
+    ├── components/             AppShell, AuthLayout, Field, ExportMenu,
+    │                           ShareDialog, Theme/LanguageSwitch
+    └── pages/                  Setup, Login, Jobs, Transcript, Presets,
+                                Search, Settings, Shared (no account needed)
 ```
 
 ## Invariants
 
-1. **No ML in the backend.** STT and LLM are two independent HTTP clients with
-   different protocols, never a shared "AI provider" abstraction.
+1. **No ML in the backend.** STT, LLM and diarisation are three independent HTTP
+   clients with three different protocols, never a shared "AI provider"
+   abstraction. The one place in this repository that imports a model library
+   is `diarizer/`, which is a separate image behind a compose profile because
+   no OpenAI-compatible endpoint for diarisation exists to point at.
 2. **Raw STT output is immutable.** Exports (txt/md/srt/vtt) and user edits are
    layers computed on top; changing an export format never re-transcribes.
 3. **`owner_id` exists from the first migration.** Retrofitting it later would
@@ -84,19 +98,42 @@ them readable in order.
 4. **The queue is the `jobs` table.** No broker. Claiming is a single
    `UPDATE ... RETURNING` transaction; stale heartbeats requeue on worker start.
 5. **The API is the whole product surface.** Anything the UI can do is reachable
-   with a bearer token.
+   with a bearer token -- with one exception, which proves the rule: a token
+   cannot mint another token, or a leaked one would survive its own revocation.
+6. **The UI names colours, never picks them.** Components use the semantic
+   tokens (`bg-primary`, `text-muted-foreground`); the two oklch blocks in
+   `index.css` are the only place a value is written, so replacing them
+   replaces the theme. `--warning` and `--success` were added to that set
+   because this app reports degraded configuration and finished work, which
+   the shadcn defaults have no colour for.
 
 ## Status
 
-Milestones 0 to 3 complete: auth, the transcription pipeline, chunking on
+All planned milestones (0 to 6) are complete: auth, the transcription pipeline, chunking on
 silence, live progress over SSE, cancellation that really stops the work,
-per-chunk retries, crash recovery, a player that follows the transcript, and
-summaries by preset with automatic map-reduce and a kept history.
-
-Not built yet, in the order [SPEC.md](../../SPEC.md) plans them: URL and yt-dlp
-ingest, search and export and sharing, diarisation.
+per-chunk retries, crash recovery, a player that follows the transcript,
+summaries by preset with automatic map-reduce and a kept history, and ingest
+from a link -- streamed directly when it points at a media file, handed to
+yt-dlp when it points at a page, with the title, channel, date and cover the
+extractor found. Then the archive: full-text search over every segment, export
+to txt/md/srt/vtt/json with timestamps and speakers as options rather than as
+formats, public read-only share links that preview themselves when pasted,
+bearer tokens for scripts, and a webhook when a job finishes. A line the model
+misheard can be corrected in place, beside the original rather than over it, and
+the search index follows by trigger. Last, diarisation:
+a container of its own, asked for per recording, merged onto the transcript by
+overlap, with speakers renameable in one place.
 
 Known gaps left deliberately open:
+
+- Diarisation runs after the whole recording is transcribed and reports no
+  progress of its own -- the bar sits at 90% for as long as the diariser takes.
+  Streaming it would mean chunking two models against each other.
+- A diariser that fails leaves the transcript finished and the failure recorded
+  on the job. There is no way to ask for diarisation again afterwards short of
+  submitting the recording a second time.
+- Nothing checks that the diariser is reachable before a job is queued: the
+  `has_diarizer` flag says a URL is configured, not that anything answers it.
 
 - Summaries have no cancel button and no retry. The transcription path has
   both; the summary path does not, and a stuck summary needs deleting.
@@ -110,7 +147,26 @@ Known gaps left deliberately open:
   only the second form is a valid input. Against a cloud endpoint this silently
   weakens the forcing rather than breaking it, so it needs a normalising table
   before the provider list widens.
-- Segment edits have a column and an export path but no endpoint yet.
+- A correction is per line and has no history: the provider's words and the
+  current correction, nothing between them. Who changed what, and when, is not
+  recorded -- an instance with two people editing one transcript would want it.
+- The webhook fires once and is never retried. A receiver that was down when a
+  job finished has to poll the API to catch up.
+- Search ranks by bm25 over segments, so a recording that says the word twice
+  outranks nothing in particular. Grouping hits by job is done in the UI.
+- A share link exposes the audio as well as the text. That is deliberate -- a
+  transcript whose player cannot play is half a document -- but it means a
+  leaked token leaks the recording too.
+- A download reports no progress. The job stays at 0% until the first chunk
+  comes back from the STT server, so fetching a large recording looks stalled.
+- Which fetcher a link gets is decided by its extension alone. A media file
+  served without one goes to yt-dlp, whose generic extractor usually copes.
+- yt-dlp runs with no cookies and no proxy, so anything behind a login or a
+  region lock fails with `ytdlp_failed` and nothing more specific.
+- The private-address check is applied to every link and to every redirect hop
+  we follow ourselves, but yt-dlp does its own fetching: a page on a public host
+  that redirects it somewhere private is not covered. Sandboxing its network
+  namespace is the real fix and is not done.
 - Both SSE streams poll the database on a timer. That is fine at this size and
   survives multiple API processes, which a shared in-memory bus would not.
 - The worker has no healthcheck; `docker-compose.yml` disables the inherited

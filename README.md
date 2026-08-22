@@ -7,10 +7,14 @@ Everything AI-shaped happens over OpenAI-compatible HTTP, so you can point it at
 Ollama, LM Studio, vLLM, a local Whisper server, or a cloud API — the service
 itself ships no model weights.
 
-> **Status: early.** Upload a file and you get a transcript with timestamps, a
-> player that follows it, and a summary shaped by whichever preset you pick.
-> Ingest from links, search, export, and sharing are still to come — see
-> [SPEC.md](SPEC.md) for the plan.
+> **Status: everything planned is built.** Upload a file or paste a link — a
+> direct one, or a page from any of the ~1800 sites yt-dlp handles — and you get
+> a transcript with timestamps, a player that follows it, and a summary shaped
+> by whichever preset you pick. The archive is searchable, exports to
+> txt/md/srt/vtt/json, and can be shared as a read-only link. A line the model
+> misheard can be corrected in place, and recordings with more than one voice
+> can be split by speaker. See [SPEC.md](SPEC.md) for why
+> each part works the way it does.
 
 ## Quick start
 
@@ -41,6 +45,28 @@ an over-long prompt without complaining and returns a confident summary of the
 first third of the recording.
 
 [speaches]: https://github.com/speaches-ai/speaches
+
+## Speakers
+
+Telling voices apart is optional and off by default, because it is slower than
+transcription and pointless for a lecture:
+
+```bash
+docker compose --profile diarize up -d --build
+```
+
+Then set `DIARIZER_URL=http://diarizer:9000` and restart. A checkbox appears
+beside the upload box; tick it and the transcript comes back split by speaker,
+with `SPEAKER_00` renameable to whoever that was — once, in one place, and every
+export and share link follows.
+
+The model is gated: accept the terms of `pyannote/speaker-diarization-3.1` once
+on huggingface.co and put a read token in `HF_TOKEN`. The image is built locally
+rather than pulled, and it is large — torch plus the weights is several
+gigabytes, which is exactly why it is a profile rather than a default.
+
+If you would rather not run that container, `DIARIZER_URL` can point at anything
+that answers `POST /diarize` with `{"segments": [{"start", "end", "speaker"}]}`.
 
 ## Configuration
 
