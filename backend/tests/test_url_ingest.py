@@ -1,3 +1,5 @@
+import asyncio
+from collections.abc import Callable
 from pathlib import Path
 
 from httpx import AsyncClient
@@ -35,6 +37,23 @@ async def run_worker_once(
         return await worker.run_once()
     finally:
         await database.dispose()
+
+
+async def until(
+    client: AsyncClient,
+    job_id: str,
+    ready: Callable[[dict], bool],  # type: ignore[type-arg]
+    timeout: float = 5.0,
+) -> dict:  # type: ignore[type-arg]
+    """Watch a job through the API until it says what we are waiting for."""
+    deadline = asyncio.get_running_loop().time() + timeout
+    while True:
+        state = (await client.get(f"/api/jobs/{job_id}")).json()
+        if ready(state):
+            return state
+        if asyncio.get_running_loop().time() > deadline:
+            raise AssertionError(f"job never reached the expected state: {state}")
+        await asyncio.sleep(0.02)
 
 
 async def submit(client: AsyncClient, url: str) -> dict:  # type: ignore[type-arg]
@@ -124,6 +143,41 @@ async def test_a_redirect_into_the_private_network_fails_the_job(tmp_path: Path)
         failed = (await client.get(f"/api/jobs/{job['id']}")).json()
         assert failed["status"] == "failed"
         assert failed["error_code"] == "url_not_allowed"
+
+
+async def test_a_job_says_which_part_of_the_work_it_is_on(
+    tmp_path: Path, sample_audio: Path
+) -> None:
+    """Fetching a two-hour recording used to look like a job that had hung: the
+    bar stayed where it started until the first chunk came back from the STT
+    server, which for a large file is several minutes in."""
+    settings = settings_with_stt(tmp_path)
+    hold = asyncio.Event()
+    files = MediaStub({"/talk.wav": sample_audio.read_bytes()}, hold=hold)
+
+    async with running_client(settings) as client:
+        job = await submit(client, "https://files.test/talk.wav")
+
+        database = Database(settings.db_path)
+        worker = Worker(
+            settings,
+            database,
+            load_or_create_secret(settings.secret_key_path),
+            stt_factory=lambda _provider: SttStub().http_client(),
+            download_factory=files.http_client,
+        )
+        working = asyncio.create_task(worker.run_once())
+        downloading = await until(client, job["id"], lambda state: state["stage"] is not None)
+        hold.set()
+        await asyncio.wait_for(working, timeout=10)
+
+        finished = (await client.get(f"/api/jobs/{job['id']}")).json()
+
+    await database.dispose()
+    assert downloading["stage"] == "fetching"
+    assert finished["status"] == "done"
+    # Nothing is being done to it any more, so no stage claims otherwise.
+    assert finished["stage"] is None
 
 
 async def test_a_direct_link_is_downloaded_and_transcribed(

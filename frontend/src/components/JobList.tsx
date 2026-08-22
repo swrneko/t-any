@@ -85,7 +85,12 @@ export function JobList({
             <p className="truncate text-sm text-muted-foreground">
               {job.status === "failed"
                 ? describeCode(job.error_code, job.error_params)
-                : formatMeta(job, i18n.language)}
+                : // While something is happening, say what: the badge only says
+                  // that the job is running, and a download that reports its
+                  // stage no longer looks like a job that has hung.
+                  job.stage
+                  ? t(`jobs.stage.${job.stage}`)
+                  : formatMeta(job, i18n.language)}
             </p>
           </div>
 

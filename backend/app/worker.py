@@ -4,7 +4,7 @@ import logging
 import os
 import socket
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from pathlib import Path
 
@@ -38,10 +38,6 @@ IDLE_POLL_SECONDS = 2.0
 
 # Failures worth repeating: the connection, not the request.
 RETRYABLE_CODES = frozenset({"stt_unreachable", "stt_server_error"})
-
-# How much of the bar transcription owns when diarisation follows it. The rest
-# is one long call with nothing to report from inside it.
-STT_SHARE_WITH_DIARISATION = 0.9
 
 
 def worker_identity() -> str:
@@ -120,6 +116,7 @@ class Worker:
                     worker_id=None,
                     started_at=None,
                     heartbeat_at=None,
+                    stage=None,
                     progress=0.0,
                 )
             )
@@ -284,6 +281,8 @@ class Worker:
                 job.error_message = failure.message
                 job.error_params = json.dumps(failure.params)
 
+            # Nothing is being done to it any more, either way.
+            job.stage = None
             job.finished_at = utcnow()
             await session.commit()
             await self._notify(session, job)
@@ -380,7 +379,7 @@ class Worker:
             await session.execute(
                 update(Job)
                 .where(Job.id == job_id)
-                .values(status=status, finished_at=utcnow())
+                .values(status=status, stage=None, finished_at=utcnow())
             )
             await session.commit()
 
@@ -424,7 +423,11 @@ class Worker:
         if audio.is_file():
             info = await probe(audio)
         else:
-            source = await self._acquire_source(job)
+            source = await self._acquire_source(session, job)
+            # ffmpeg reports its own progress on stderr and we do not read it;
+            # what the stage buys here is the difference between "stuck" and
+            # "converting a two-hour video", which is most of the question.
+            await self._enter(session, job, "converting")
             info = await normalize_to_opus(source, audio)
             # The original goes the moment we no longer need it. Keeping video
             # around fills a home server's disk inside a week.
@@ -441,6 +444,7 @@ class Worker:
         job.stt_model = model
         await session.commit()
 
+        await self._enter(session, job, "transcribing")
         chunks = await self._plan_chunks(audio, info.duration_sec)
         language = job.language
         collected: list[SttSegment] = []
@@ -475,8 +479,7 @@ class Worker:
                 if piece is not audio:
                     piece.unlink(missing_ok=True)
 
-                job.progress = STT_SHARE_WITH_DIARISATION if job.diarize else 1.0
-                job.progress *= (chunk.index + 1) / len(chunks)
+                job.progress = (chunk.index + 1) / len(chunks)
                 job.heartbeat_at = utcnow()
                 await session.commit()
 
@@ -489,6 +492,9 @@ class Worker:
 
         speakers: list[str | None] = [None] * len(collected)
         if job.diarize:
+            # The diariser reports nothing until it is done, so this stage has a
+            # name and no number -- which is still more than a bar that stops.
+            await self._enter(session, job, "diarizing")
             speakers = await self._diarize(session, job, audio, collected)
 
         session.add_all(
@@ -596,7 +602,41 @@ class Worker:
             hard_max=self.settings.chunk_max_seconds,
         )
 
-    async def _acquire_source(self, job: Job) -> Path:
+    async def _enter(self, session: AsyncSession, job: Job, stage: str) -> None:
+        """Say what is being done now, and start counting that part from zero."""
+        job.stage = stage
+        job.progress = 0.0
+        job.heartbeat_at = utcnow()
+        await session.commit()
+
+    def _downloaded(
+        self, session: AsyncSession, job: Job
+    ) -> Callable[[int, int | None], Awaitable[None]]:
+        """Turn bytes arriving into a number somebody is watching.
+
+        Written at most once per percentage point: a gigabyte at a megabyte a
+        chunk is a thousand chunks, and a thousand commits to move a bar a
+        thousandth of the way is a database write nobody asked for. A server
+        that declares no length leaves the stage saying what is happening with
+        no number attached, which is the honest answer.
+        """
+        last = -1
+
+        async def report(written: int, declared: int | None) -> None:
+            nonlocal last
+            if not declared:
+                return
+            point = int(min(written / declared, 1.0) * 100)
+            if point == last:
+                return
+            last = point
+            job.progress = point / 100
+            job.heartbeat_at = utcnow()
+            await session.commit()
+
+        return report
+
+    async def _acquire_source(self, session: AsyncSession, job: Job) -> Path:
         """Put the original media on disk, whatever it took to get there.
 
         An upload is already here; a link is not. Fetching happens in the worker
@@ -606,6 +646,7 @@ class Worker:
         if job.source_type == "upload":
             return self._find_source(job)
 
+        await self._enter(session, job, "fetching")
         workspace = self.settings.tmp_dir / str(job.id)
         # A crash mid-download leaves a truncated file that looks complete.
         # Uploads are safe to resume this way; a download is not.
@@ -622,6 +663,7 @@ class Worker:
                     workspace,
                     self.settings.max_upload_size,
                     allow_private=allow_private,
+                    on_progress=self._downloaded(session, job),
                 )
 
         # Checked again here, not only at submission: the answer a name gives can

@@ -86,6 +86,9 @@ class JobOut(BaseModel):
     audio_bytes: int | None
     diarize: bool
     status: str
+    # Which part of the work is happening, and how far into that part we are.
+    # Null once nothing is being done, which is every status but `running`.
+    stage: str | None
     progress: float
     language: str | None
     duration_sec: float | None

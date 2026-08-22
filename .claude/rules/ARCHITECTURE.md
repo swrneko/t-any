@@ -177,8 +177,9 @@ overlap, with speakers renameable in one place.
 Known gaps left deliberately open:
 
 - Diarisation runs after the whole recording is transcribed and reports no
-  progress of its own -- the bar sits at 90% for as long as the diariser takes.
-  Streaming it would mean chunking two models against each other.
+  progress of its own -- the stage says what is happening and never says how
+  far it has got. Streaming it would mean chunking two models against each
+  other.
 - A diariser that fails leaves the transcript finished and the failure recorded
   on the job. There is no way to ask for diarisation again afterwards short of
   submitting the recording a second time.
@@ -219,8 +220,13 @@ Known gaps left deliberately open:
 - A share link exposes the audio as well as the text. That is deliberate -- a
   transcript whose player cannot play is half a document -- but it means a
   leaked token leaks the recording too.
-- A download reports no progress. The job stays at 0% until the first chunk
-  comes back from the STT server, so fetching a large recording looks stalled.
+- A download counts bytes only when the server declares how many there will be,
+  and yt-dlp reports nothing at all: its progress goes to a pipe nobody reads,
+  and the printed filepath we do read arrives at the end. Both cases still name
+  the stage, so the page says what is happening without saying how far along.
+- ffmpeg has the same shape: it prints a running timestamp on stderr and the
+  conversion stage ignores it. For audio it is seconds; for a two-hour video it
+  is not.
 - Which fetcher a link gets is decided by its extension alone. A media file
   served without one goes to yt-dlp, whose generic extractor usually copes.
 - yt-dlp runs with no cookies and no proxy, so anything behind a login or a

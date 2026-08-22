@@ -45,11 +45,17 @@
     "noProvider": "No speech-to-text server is configured, so transcription will fail. Set STT_BASE_URL and restart.",
     "status": {
       "queued": "Queued",
-      "running": "Transcribing",
+      "running": "In progress",
       "done": "Ready",
       "failed": "Failed",
       "cancelling": "Stopping",
       "cancelled": "Cancelled"
+    },
+    "stage": {
+      "fetching": "Downloading",
+      "converting": "Converting",
+      "transcribing": "Transcribing",
+      "diarizing": "Finding speakers"
     },
     "cancel": "Cancel",
     "urlLabel": "Link to a recording",

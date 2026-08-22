@@ -56,6 +56,7 @@ def _present(job: Job, settings: Settings) -> JobOut:
         has_thumbnail=job.has_thumbnail,
         diarize=job.diarize,
         status=job.status,
+        stage=job.stage,
         progress=job.progress,
         language=job.language,
         duration_sec=job.duration_sec,

@@ -45,11 +45,17 @@
     "noProvider": "STT-сервер не настроен, транскрибация упадёт. Задайте STT_BASE_URL и перезапустите.",
     "status": {
       "queued": "В очереди",
-      "running": "Распознаю",
+      "running": "В работе",
       "done": "Готово",
       "failed": "Ошибка",
       "cancelling": "Останавливаю",
       "cancelled": "Отменено"
+    },
+    "stage": {
+      "fetching": "Скачиваю",
+      "converting": "Конвертирую",
+      "transcribing": "Распознаю",
+      "diarizing": "Определяю говорящих"
     },
     "cancel": "Отменить",
     "urlLabel": "Ссылка на запись",

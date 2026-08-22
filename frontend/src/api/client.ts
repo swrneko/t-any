@@ -38,6 +38,9 @@ export interface Job {
   audio_bytes: number | null;
   diarize: boolean;
   status: JobStatus;
+  /** Which part of the work is happening; null when none of it is. */
+  stage: "fetching" | "converting" | "transcribing" | "diarizing" | null;
+  /** How far that part has got -- per stage, not over the whole job. */
   progress: number;
   language: string | null;
   duration_sec: number | null;

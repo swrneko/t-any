@@ -131,6 +131,12 @@ class Job(Base):
     has_thumbnail: Mapped[bool] = mapped_column(sa.Boolean, default=False)
 
     status: Mapped[str] = mapped_column(sa.String(16), default="queued", index=True)
+
+    # What is being done to the recording right now, and how far that part has
+    # got. Progress is per stage rather than over the whole job: a download and
+    # a transcription have nothing to weigh against each other, and one bar
+    # covering both would have to invent the exchange rate between them.
+    stage: Mapped[str | None] = mapped_column(sa.String(16), nullable=True)
     progress: Mapped[float] = mapped_column(sa.Float, default=0.0)
 
     # Asked for per recording, not per instance: diarisation costs minutes of

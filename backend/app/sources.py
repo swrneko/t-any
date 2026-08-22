@@ -10,6 +10,7 @@ import asyncio
 import ipaddress
 import json
 import socket
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
@@ -95,7 +96,6 @@ async def ensure_allowed_host(url: str, *, allow_private: bool) -> None:
             )
 
 
-DOWNLOAD_CHUNK = 1024 * 1024
 # Enough for the http -> https and www hops a real file goes through, few enough
 # that a redirect loop stops being our problem.
 MAX_REDIRECTS = 5
@@ -108,6 +108,7 @@ async def download_media(
     max_bytes: int,
     *,
     allow_private: bool = False,
+    on_progress: Callable[[int, int | None], Awaitable[None]] | None = None,
 ) -> Path:
     """Stream a direct link onto disk, the same way an upload is streamed.
 
@@ -118,6 +119,9 @@ async def download_media(
     Redirects are followed by hand because every hop has to pass the same host
     check as the original link -- httpx following them for us would turn a
     public redirector into a way through it.
+
+    `on_progress` is told the bytes so far and the total the server claimed, if
+    it claimed one. Whether that is worth showing anybody is not decided here.
     """
     suffix = PurePosixPath(unquote(urlparse(url).path)).suffix or ".bin"
     target = workspace / f"source{suffix}"
@@ -143,9 +147,15 @@ async def download_media(
                         status=response.status_code,
                         url=url,
                     )
+                declared = _content_length(response)
                 with target.open("wb") as sink:
-                    async for chunk in response.aiter_bytes(DOWNLOAD_CHUNK):
+                    # Whatever arrives, when it arrives: buffering up to a fixed
+                    # size before writing would also mean saying nothing about
+                    # the download until that much of it had accumulated.
+                    async for chunk in response.aiter_bytes():
                         written += len(chunk)
+                        if on_progress is not None:
+                            await on_progress(written, declared)
                         if written > max_bytes:
                             sink.close()
                             target.unlink(missing_ok=True)
@@ -176,6 +186,22 @@ async def download_media(
         raise ApiError(502, "download_failed", "That link returned nothing.", status=204, url=url)
 
     return target
+
+
+def _content_length(response: httpx.Response) -> int | None:
+    """What the server says it is about to send, if anything believable.
+
+    A header, not a promise: the byte count that decides anything is the one
+    counted on arrival. This is only ever used to say how far along we are.
+    """
+    raw = response.headers.get("content-length")
+    if raw is None:
+        return None
+    try:
+        declared = int(raw)
+    except ValueError:
+        return None
+    return declared if declared > 0 else None
 
 
 @dataclass(frozen=True)

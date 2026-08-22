@@ -134,19 +134,30 @@ class MediaStub:
     bytes arrive in order.
     """
 
-    def __init__(self, files: dict[str, bytes], redirects: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        files: dict[str, bytes],
+        redirects: dict[str, str] | None = None,
+        hold: asyncio.Event | None = None,
+    ) -> None:
         self.requested: list[str] = []
+        # When held, the body is not sent until a test releases it -- which is
+        # what a slow server looks like from here.
+        self.asked = asyncio.Event()
         self.app = FastAPI()
 
         @self.app.get("/{path:path}")
         async def serve(path: str) -> Response:
             self.requested.append(f"/{path}")
+            self.asked.set()
             elsewhere = (redirects or {}).get(f"/{path}")
             if elsewhere is not None:
                 return Response(status_code=302, headers={"Location": elsewhere})
             body = files.get(f"/{path}")
             if body is None:
                 return JSONResponse({"detail": "gone"}, status_code=404)
+            if hold is not None:
+                await hold.wait()
             return Response(body, media_type="application/octet-stream")
 
     def http_client(self) -> httpx.AsyncClient:
