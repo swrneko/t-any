@@ -3,6 +3,8 @@ export type AuthMode = "builtin" | "proxy" | "disabled";
 export interface SetupStatus {
   needs_setup: boolean;
   auth_mode: AuthMode;
+  /** Whether the diariser container is running, so the option is worth offering. */
+  has_diarizer: boolean;
 }
 
 export interface User {
@@ -11,15 +13,39 @@ export interface User {
   is_admin: boolean;
 }
 
+/** A person, and what deleting them would take with them. */
+export interface UserRow extends User {
+  jobs: number;
+}
+
 export type JobStatus = "queued" | "running" | "cancelling" | "cancelled" | "done" | "failed";
 
 export const TERMINAL_STATUSES: readonly JobStatus[] = ["done", "failed", "cancelled"];
 
+export type JobSource = "upload" | "remote_url" | "ytdlp";
+
 export interface Job {
   id: string;
   title: string;
-  source_type: string;
+  source_type: JobSource;
+  /** The uploaded filename, or the link the job was created from. Several files
+   *  joined into one recording keep every name here, comma separated. */
+  source_ref: string;
+  /** How many files were joined to make it. One for everything else. */
+  parts: number;
+  /** Shared by recordings submitted together and transcribed apart. */
+  batch_id: string | null;
+  author: string | null;
+  /** A calendar day (YYYY-MM-DD), not an instant: that is all the extractor knows. */
+  published_on: string | null;
+  has_thumbnail: boolean;
+  /** What the recording still costs on disk; null once only the words are left. */
+  audio_bytes: number | null;
+  diarize: boolean;
   status: JobStatus;
+  /** Which part of the work is happening; null when none of it is. */
+  stage: "fetching" | "converting" | "transcribing" | "diarizing" | null;
+  /** How far that part has got -- per stage, not over the whole job. */
   progress: number;
   language: string | null;
   duration_sec: number | null;
@@ -34,7 +60,16 @@ export interface TranscriptSegment {
   start: number;
   end: number;
   text: string;
+  /** Whether `text` is a correction. The provider's own words are still there. */
+  edited: boolean;
+  /** The diariser's label. What it is called on screen lives in `speakers`. */
   speaker: string | null;
+}
+
+export interface Speaker {
+  id: string;
+  label: string;
+  display_name: string | null;
 }
 
 export interface Transcript {
@@ -42,6 +77,7 @@ export interface Transcript {
   language: string | null;
   text: string;
   segments: TranscriptSegment[];
+  speakers: Speaker[];
 }
 
 export interface Preset {
@@ -77,15 +113,115 @@ export interface Summary {
   finished_at: string | null;
 }
 
+export type ExportFormat = "txt" | "md" | "srt" | "vtt" | "json";
+
+export interface ExportOptions {
+  timestamps?: boolean;
+  speakers?: boolean;
+  download?: boolean;
+}
+
+export interface Share {
+  token: string;
+  job_id: string;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export interface SearchHit {
+  job_id: string;
+  job_title: string;
+  idx: number;
+  start: number;
+  /** The matched words arrive wrapped in \x02 and \x03, never in markup. */
+  excerpt: string;
+}
+
+export const MARK_START = "\u0002";
+export const MARK_END = "\u0003";
+
+export interface ApiTokenSummary {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+/** Only ever returned by the call that created it. */
+export interface CreatedApiToken extends ApiTokenSummary {
+  token: string;
+}
+
+export interface SharedTranscript {
+  job_id: string;
+  title: string;
+  author: string | null;
+  published_on: string | null;
+  language: string | null;
+  duration_sec: number | null;
+  has_audio: boolean;
+  text: string;
+  segments: TranscriptSegment[];
+  /** Read-only: a reader sees the names, and cannot change them. */
+  speakers: { label: string; display_name: string | null }[];
+}
+
+export type ProviderKind = "stt" | "llm";
+
 export interface Provider {
   id: string;
-  kind: "stt" | "llm";
+  kind: ProviderKind;
   name: string;
   base_url: string;
   default_model: string | null;
   context_tokens: number | null;
   is_default: boolean;
+  /** Masked, always. The key itself never comes back out of the server. */
   api_key: string | null;
+}
+
+export interface ProviderDraft {
+  kind: ProviderKind;
+  name: string;
+  base_url: string;
+  /** Omitted keeps the stored key, "" clears it, anything else replaces it. */
+  api_key?: string;
+  default_model: string | null;
+  context_tokens: number | null;
+  is_default: boolean;
+}
+
+/** Where a finished job is announced. The secret comes back masked. */
+export interface Webhook {
+  url: string | null;
+  secret: string | null;
+}
+
+export interface WebhookTest {
+  delivered: boolean;
+  status: number | null;
+  error_code: string | null;
+}
+
+/** How long things are kept. Null means forever, and that is the default. */
+export interface Retention {
+  audio_days: number | null;
+  job_days: number | null;
+}
+
+export interface Storage {
+  audio_bytes: number;
+  other_bytes: number;
+  recordings: number;
+}
+
+/** What the endpoint said when asked. A refusal is an answer, not an error. */
+export interface ProviderProbe {
+  reachable: boolean;
+  status: number | null;
+  latency_ms: number | null;
+  models: string[];
+  error_code: string | null;
 }
 
 /**
@@ -130,6 +266,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+function exportQuery(format: ExportFormat, options: ExportOptions): string {
+  const query = new URLSearchParams({ format });
+  if (options.timestamps) query.set("timestamps", "true");
+  if (options.speakers === false) query.set("speakers", "false");
+  if (options.download) query.set("download", "true");
+  return query.toString();
+}
+
 export const api = {
   setupStatus: () => request<SetupStatus>("/api/setup/status"),
 
@@ -155,16 +299,56 @@ export const api = {
 
   readTranscript: (id: string) => request<Transcript>(`/api/jobs/${id}/transcript`),
 
-  uploadJob: (file: File) => {
+  /** One recording. Several files make one transcript, joined in the order
+   *  they are given -- for a meeting that arrived split across cards. */
+  uploadJob: (files: File | File[], diarize = false, batch?: string) => {
     const body = new FormData();
-    body.append("file", file);
+    for (const file of Array.isArray(files) ? files : [files]) body.append("file", file);
+    body.append("diarize", String(diarize));
+    // Names the pile these files were dropped in as, for the ones that are
+    // transcribed apart. The server cannot see it: it gets one at a time.
+    if (batch) body.append("batch", batch);
     // No Content-Type header: the browser has to set the multipart boundary.
     return request<Job>("/api/jobs", { method: "POST", body });
   },
 
+  /** Queue a link. The download happens in the worker, so this returns at once. */
+  addUrlJob: (url: string, diarize = false) =>
+    request<Job>("/api/jobs/url", { method: "POST", body: JSON.stringify({ url, diarize }) }),
+
+  /** Blank text restores what the provider heard; the original is never lost. */
+  correctSegment: (jobId: string, idx: number, text: string) =>
+    request<TranscriptSegment>(`/api/jobs/${jobId}/segments/${idx}`, {
+      method: "PATCH",
+      body: JSON.stringify({ text }),
+    }),
+
+  renameSpeaker: (jobId: string, speakerId: string, displayName: string) =>
+    request<Speaker>(`/api/jobs/${jobId}/speakers/${speakerId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ display_name: displayName }),
+    }),
+
   cancelJob: (id: string) => request<Job>(`/api/jobs/${id}/cancel`, { method: "POST" }),
 
+  /** Ask who was speaking on a recording that is already transcribed. */
+  diarizeJob: (id: string) => request<Job>(`/api/jobs/${id}/diarize`, { method: "POST" }),
+
+  /** Everything: the words, the audio, the summaries and the share link. */
+  deleteJob: (id: string) => request<void>(`/api/jobs/${id}`, { method: "DELETE" }),
+
+  /** The recording only. The transcript stays, and its player goes quiet. */
+  deleteJobAudio: (id: string) => request<void>(`/api/jobs/${id}/audio`, { method: "DELETE" }),
+
+  deleteJobs: (ids: string[], audioOnly = false) =>
+    request<{ deleted: number; skipped: number }>("/api/jobs/delete", {
+      method: "POST",
+      body: JSON.stringify({ ids, audio_only: audioOnly }),
+    }),
+
   audioUrl: (id: string) => `/api/jobs/${id}/audio`,
+
+  thumbnailUrl: (id: string) => `/api/jobs/${id}/thumbnail`,
 
   /** Live job list. One connection for every job, not one per job: browsers cap
    * concurrent requests per origin, and a queue of ten would starve. */
@@ -177,7 +361,116 @@ export const api = {
     return () => source.close();
   },
 
+  /** Follow one job. The list stream answers "what is happening"; this answers
+   *  "what is happening to this recording", which is a different page. */
+  watchJob: (id: string, onJob: (job: Job) => void): (() => void) => {
+    const source = new EventSource(`/api/jobs/${id}/events`);
+    source.onmessage = (event) => onJob(JSON.parse(event.data) as Job);
+    source.onerror = () => source.close();
+    return () => source.close();
+  },
+
+  exportUrl: (jobId: string, format: ExportFormat, options: ExportOptions = {}) =>
+    `/api/jobs/${jobId}/export?${exportQuery(format, options)}`,
+
+  /** The same render the download gives, as a string, for the clipboard. */
+  readExport: async (jobId: string, format: ExportFormat, options: ExportOptions = {}) => {
+    const response = await fetch(api.exportUrl(jobId, format, options), {
+      credentials: "same-origin",
+    });
+    if (!response.ok) throw new ApiError("unknown", response.status);
+    return response.text();
+  },
+
+  search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
+
+  createShare: (jobId: string, expiresInDays: number | null = null) =>
+    request<Share>(`/api/jobs/${jobId}/share`, {
+      method: "POST",
+      body: JSON.stringify({ expires_in_days: expiresInDays }),
+    }),
+
+  readShare: (jobId: string) => request<Share>(`/api/jobs/${jobId}/share`),
+
+  revokeShare: (jobId: string) => request<void>(`/api/jobs/${jobId}/share`, { method: "DELETE" }),
+
+  readSharedTranscript: (token: string) =>
+    request<SharedTranscript>(`/api/public/shares/${token}`),
+
+  sharedAudioUrl: (token: string) => `/api/public/shares/${token}/audio`,
+
+  sharedExportUrl: (token: string, format: ExportFormat, options: ExportOptions = {}) =>
+    `/api/public/shares/${token}/export?${exportQuery(format, options)}`,
+
+  listTokens: () => request<ApiTokenSummary[]>("/api/tokens"),
+
+  createToken: (name: string) =>
+    request<CreatedApiToken>("/api/tokens", { method: "POST", body: JSON.stringify({ name }) }),
+
+  revokeToken: (id: string) => request<void>(`/api/tokens/${id}`, { method: "DELETE" }),
+
+  listUsers: () => request<UserRow[]>("/api/users"),
+
+  createUser: (username: string, password: string, isAdmin = false) =>
+    request<User>("/api/users", {
+      method: "POST",
+      body: JSON.stringify({ username, password, is_admin: isAdmin }),
+    }),
+
+  updateUser: (id: string, changes: { is_admin?: boolean; password?: string }) =>
+    request<User>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(changes) }),
+
+  /** Refused while they still hold recordings, unless withJobs says otherwise. */
+  deleteUser: (id: string, withJobs = false) =>
+    request<void>(`/api/users/${id}?with_jobs=${withJobs}`, { method: "DELETE" }),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>("/api/auth/password", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
+
+  readWebhook: () => request<Webhook>("/api/settings/webhook"),
+
+  /** An absent secret keeps the stored one; "" clears it. */
+  writeWebhook: (url: string | null, secret?: string) =>
+    request<Webhook>("/api/settings/webhook", {
+      method: "PUT",
+      body: JSON.stringify(secret === undefined ? { url } : { url, secret }),
+    }),
+
+  testWebhook: () => request<WebhookTest>("/api/settings/webhook/test", { method: "POST" }),
+
+  readRetention: () => request<Retention>("/api/settings/retention"),
+
+  writeRetention: (policy: Retention) =>
+    request<Retention>("/api/settings/retention", {
+      method: "PUT",
+      body: JSON.stringify(policy),
+    }),
+
+  readStorage: () => request<Storage>("/api/settings/storage"),
+
   listProviders: () => request<Provider[]>("/api/providers"),
+
+  createProvider: (draft: ProviderDraft) =>
+    request<Provider>("/api/providers", { method: "POST", body: JSON.stringify(draft) }),
+
+  updateProvider: (id: string, changes: Partial<ProviderDraft>) =>
+    request<Provider>(`/api/providers/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(changes),
+    }),
+
+  deleteProvider: (id: string) => request<void>(`/api/providers/${id}`, { method: "DELETE" }),
+
+  /** Ask an address whether anything lives there — a saved provider by id, or a
+   *  draft that has not been committed to yet. */
+  testProvider: (target: { provider_id?: string; base_url?: string; api_key?: string }) =>
+    request<ProviderProbe>("/api/providers/test", {
+      method: "POST",
+      body: JSON.stringify(target),
+    }),
 
   listPresets: () => request<Preset[]>("/api/presets"),
 
@@ -198,6 +491,12 @@ export const api = {
     }),
 
   deleteSummary: (id: string) => request<void>(`/api/summaries/${id}`, { method: "DELETE" }),
+
+  /** Queued: stopped at once. Running: the worker drops the request in flight. */
+  cancelSummary: (id: string) => request<Summary>(`/api/summaries/${id}/cancel`, { method: "POST" }),
+
+  /** The same preset again, in place, keeping whatever parts already came back. */
+  retrySummary: (id: string) => request<Summary>(`/api/summaries/${id}/retry`, { method: "POST" }),
 
   /** Follow one summary as the worker writes it. */
   watchSummary: (id: string, onSummary: (summary: Summary) => void): (() => void) => {

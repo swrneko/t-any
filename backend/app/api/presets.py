@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter
 from sqlalchemy import or_, select
 
+from app import presets as catalogue
 from app.deps import CurrentUserDep, SessionDep
 from app.errors import ApiError
 from app.models import Preset, User
@@ -40,11 +41,25 @@ async def _editable_preset(session: SessionDep, user: User, preset_id: uuid.UUID
 @router.get("")
 async def list_presets(user: CurrentUserDep, session: SessionDep) -> list[PresetOut]:
     presets = await session.scalars(
-        select(Preset)
-        .where(or_(Preset.owner_id == user.id, Preset.owner_id.is_(None)))
-        .order_by(Preset.is_builtin.desc(), Preset.created_at)
+        select(Preset).where(or_(Preset.owner_id == user.id, Preset.owner_id.is_(None)))
     )
-    return [PresetOut.model_validate(preset) for preset in presets]
+
+    # The built-ins are ordered by the catalogue and the rest by age. Ordering
+    # all of them by `created_at` would put a preset added in a later release
+    # at the bottom of an installation that has been running a while and beside
+    # its relatives on a fresh one -- the same release offering two different
+    # lists. The catalogue is read here rather than bound at import so that a
+    # release which reorders it needs no other change.
+    rank = {preset.key: index for index, preset in enumerate(catalogue.BUILTIN_PRESETS)}
+    rows = sorted(
+        presets,
+        key=lambda preset: (
+            not preset.is_builtin,
+            rank.get(preset.builtin_key or "", len(rank)),
+            preset.created_at,
+        ),
+    )
+    return [PresetOut.model_validate(preset) for preset in rows]
 
 
 @router.post("", status_code=201)

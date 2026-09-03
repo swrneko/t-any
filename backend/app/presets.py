@@ -30,6 +30,27 @@ BUILTIN_PRESETS: tuple[BuiltinPreset, ...] = (
         ),
         temperature=0.2,
     ),
+    # Not the same request as `brief`, though both are short. A summary judges
+    # -- it says what the recording amounted to. A retelling does not: it walks
+    # the thing from beginning to end and reports what was said, in order,
+    # which is what somebody who missed the meeting actually asks for.
+    BuiltinPreset(
+        key="retelling",
+        name="Short retelling",
+        description="What was said, start to finish, in a paragraph or two",
+        system_prompt=(
+            "You retell transcripts. Follow the recording from beginning to end and "
+            "report what was said, in the order it was said. Do not judge what "
+            "mattered, do not group by topic, and never add anything that is not in "
+            f"the transcript. {LANGUAGE_RULE}"
+        ),
+        user_template=(
+            "Retell the transcript below in one or two paragraphs of prose, keeping "
+            "the order in which things came up. No headings and no lists.\n\n"
+            "{transcript}"
+        ),
+        temperature=0.2,
+    ),
     BuiltinPreset(
         key="detailed",
         name="Detailed notes by topic",

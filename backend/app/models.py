@@ -44,6 +44,40 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
+class ApiToken(Base):
+    """A bearer token, so everything the UI does is reachable from a script.
+
+    Stored as a plain SHA-256 of a long random string, not as an argon2 hash:
+    the secret has full entropy already, there is nothing to brute-force, and
+    this one is checked on every single request.
+    """
+
+    __tablename__ = "api_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(sa.String(128))
+    token_hash: Mapped[str] = mapped_column(sa.String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class InstanceSetting(Base):
+    """Configuration that outlives the environment.
+
+    Set in the UI, kept here, read without a restart -- the same bargain as
+    providers, for the handful of values that have nowhere else to live. The
+    value is JSON so a policy can grow a field without a migration.
+    """
+
+    __tablename__ = "instance_settings"
+
+    key: Mapped[str] = mapped_column(sa.String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(sa.Text)
+
+
 class Provider(Base):
     """An OpenAI-compatible endpoint.
 
@@ -64,6 +98,18 @@ class Provider(Base):
     is_default: Mapped[bool] = mapped_column(sa.Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
+    # One default per kind, said where it cannot be argued with: the API demotes
+    # the previous one in the same transaction, and anything that does not is
+    # refused by the database rather than left picking a row at random.
+    __table_args__ = (
+        sa.Index(
+            "uq_providers_default_per_kind",
+            "kind",
+            unique=True,
+            sqlite_where=sa.text("is_default"),
+        ),
+    )
+
 
 class Job(Base):
     __tablename__ = "jobs"
@@ -77,8 +123,36 @@ class Job(Base):
     source_ref: Mapped[str] = mapped_column(sa.Text)
     title: Mapped[str] = mapped_column(sa.Text)
 
+    # How many files were joined to make this recording. Counted here rather
+    # than by splitting `source_ref`, which holds their names and cannot be
+    # split safely: a filename is allowed to contain a comma.
+    parts: Mapped[int] = mapped_column(sa.Integer, default=1, server_default="1")
+
+    # Recordings submitted together but transcribed apart. Named by whoever
+    # submitted them, because the pile is only a pile before the first request:
+    # the server sees one upload at a time and could not tell. A grouping key
+    # and nothing else -- it points at no row and no table.
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid, index=True, nullable=True)
+
+    # What the extractor knew about the recording. A channel name and a day, not
+    # an instant: yt-dlp reports the upload date with no time and no zone, and
+    # storing it as a timestamp would move it across midnight for half the world.
+    author: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    published_on: Mapped[str | None] = mapped_column(sa.String(10), nullable=True)
+    has_thumbnail: Mapped[bool] = mapped_column(sa.Boolean, default=False)
+
     status: Mapped[str] = mapped_column(sa.String(16), default="queued", index=True)
+
+    # What is being done to the recording right now, and how far that part has
+    # got. Progress is per stage rather than over the whole job: a download and
+    # a transcription have nothing to weigh against each other, and one bar
+    # covering both would have to invent the exchange rate between them.
+    stage: Mapped[str | None] = mapped_column(sa.String(16), nullable=True)
     progress: Mapped[float] = mapped_column(sa.Float, default=0.0)
+
+    # Asked for per recording, not per instance: diarisation costs minutes of
+    # someone's GPU, and most of what people transcribe has one voice in it.
+    diarize: Mapped[bool] = mapped_column(sa.Boolean, default=False)
 
     language: Mapped[str | None] = mapped_column(sa.String(16), nullable=True)
     prompt: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
@@ -190,6 +264,44 @@ class Summary(Base):
 
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class Share(Base):
+    """A public, read-only link to one transcript.
+
+    One live link per job, not a list of them: a second token is a second thing
+    to remember to revoke, and nobody remembers. The token itself is the secret,
+    so it is long enough not to be guessed and is never derived from the job id.
+    """
+
+    __tablename__ = "shares"
+
+    token: Mapped[str] = mapped_column(sa.String(64), primary_key=True)
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("jobs.id", ondelete="CASCADE"), unique=True
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class Speaker(Base):
+    """One voice in one recording.
+
+    The label the diariser invented is the identity and never changes; the name
+    a person puts on it lives in one column, so renaming SPEAKER_01 to "Marina"
+    is a single write and every segment, export and share redraws itself.
+    """
+
+    __tablename__ = "speakers"
+
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid7)
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("jobs.id", ondelete="CASCADE"), index=True
+    )
+    label: Mapped[str] = mapped_column(sa.String(64))
+    display_name: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+
+    __table_args__ = (sa.UniqueConstraint("job_id", "label", name="uq_speakers_job_label"),)
 
 
 class Segment(Base):

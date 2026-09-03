@@ -135,3 +135,29 @@ async def test_two_workers_never_take_the_same_job(tmp_path: Path, sample_audio:
 
         assert sorted(outcomes) == [False, True]
         assert len(stub.calls) == 1
+
+
+async def test_two_files_become_one_recording(tmp_path: Path, sample_audio: Path) -> None:
+    """The parts are joined before anything is transcribed, so the timestamps
+    run through the whole meeting rather than restarting at every card."""
+    settings = settings_with_stt(tmp_path)
+
+    async with running_client(settings) as client:
+        await client.post("/api/setup", json=ADMIN_CREDENTIALS)
+        await client.post("/api/auth/login", json=ADMIN_CREDENTIALS)
+        with sample_audio.open("rb") as first, sample_audio.open("rb") as second:
+            job = (
+                await client.post(
+                    "/api/jobs",
+                    files=[
+                        ("file", ("part-one.wav", first, "audio/wav")),
+                        ("file", ("part-two.wav", second, "audio/wav")),
+                    ],
+                )
+            ).json()
+
+        assert await run_worker_once(settings, SttStub()) is True
+
+        finished = (await client.get(f"/api/jobs/{job['id']}")).json()
+        assert finished["status"] == "done"
+        assert finished["duration_sec"] == pytest.approx(6.0, abs=0.3)

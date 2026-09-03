@@ -1,31 +1,26 @@
-import AddIcon from "@mui/icons-material/Add";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
-import EditIcon from "@mui/icons-material/Edit";
-import {
-  Alert,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  IconButton,
-  List,
-  ListItem,
-  ListItemText,
-  Paper,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from "@mui/material";
+import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api, type Preset, type PresetDraft } from "../api/client";
-import { useApiErrorMessage } from "../useApiError";
-import { usePresetLabel } from "../usePresetLabel";
+import { api, type Preset, type PresetDraft } from "@/api/client";
+import { Field } from "@/components/Field";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { useApiErrorMessage } from "@/useApiError";
+import { usePresetLabel } from "@/usePresetLabel";
 
 const BLANK: PresetDraft = {
   name: "",
@@ -66,6 +61,11 @@ export function PresetsPage() {
     void refresh();
   }, [refresh]);
 
+  const patch = (changes: Partial<PresetDraft>) =>
+    setEditing((current) =>
+      current ? { ...current, draft: { ...current.draft, ...changes } } : current,
+    );
+
   const save = async () => {
     if (!editing) return;
     setError(null);
@@ -92,162 +92,162 @@ export function PresetsPage() {
   };
 
   return (
-    <Stack spacing={3}>
-      <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between" }}>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>
-          {t("presets.title")}
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setEditing({ id: null, draft: BLANK })}
-        >
+    <div className="grid gap-6">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">{t("presets.title")}</h1>
+        <Button onClick={() => setEditing({ id: null, draft: BLANK })}>
+          <Plus className="size-4" />
           {t("presets.new")}
         </Button>
-      </Stack>
+      </div>
 
-      {error && <Alert severity="error">{error}</Alert>}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-      <Paper elevation={0} sx={{ borderRadius: 6, overflow: "hidden" }}>
-        <List disablePadding>
-          {presets.map((preset) => {
-            const { name, description } = label(preset);
-            return (
-              <ListItem
-                key={preset.id}
-                divider
-                secondaryAction={
-                  <Stack direction="row" sx={{ gap: 0.5 }}>
-                    {preset.is_builtin ? (
-                      <Tooltip title={t("presets.duplicate")}>
-                        <IconButton
-                          size="small"
-                          onClick={() =>
-                            setEditing({
-                              id: null,
-                              draft: {
-                                ...toDraft(preset),
-                                name: t("presets.copyOf", { name }),
-                              },
-                            })
-                          }
-                        >
-                          <ContentCopyIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    ) : (
-                      <>
-                        <IconButton
-                          size="small"
-                          onClick={() => setEditing({ id: preset.id, draft: toDraft(preset) })}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton size="small" onClick={() => void remove(preset)}>
-                          <DeleteOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </>
-                    )}
-                  </Stack>
-                }
-              >
-                <ListItemText
-                  primary={
-                    <Stack direction="row" sx={{ alignItems: "center", gap: 1 }}>
-                      <span>{name}</span>
-                      {preset.is_builtin && (
-                        <Chip size="small" variant="outlined" label={t("presets.builtinTag")} />
-                      )}
-                    </Stack>
-                  }
-                  secondary={description}
-                  sx={{ pr: 12 }}
-                />
-              </ListItem>
-            );
-          })}
-        </List>
-      </Paper>
+      <Card className="gap-0 overflow-hidden p-0">
+        {presets.map((preset, index) => {
+          const { name, description } = label(preset);
+          return (
+            <div
+              key={preset.id}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3",
+                index > 0 && "border-t border-border",
+              )}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate font-medium">{name}</span>
+                  {preset.is_builtin && (
+                    <Badge variant="outline">{t("presets.builtinTag")}</Badge>
+                  )}
+                </div>
+                <p className="truncate text-sm text-muted-foreground">{description}</p>
+              </div>
 
-      <Dialog open={editing !== null} onClose={() => setEditing(null)} fullWidth maxWidth="sm">
-        <DialogTitle>{editing?.id ? t("presets.edit") : t("presets.new")}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <TextField
-              label={t("presets.name")}
-              value={editing?.draft.name ?? ""}
-              onChange={(event) =>
-                setEditing((current) =>
-                  current ? { ...current, draft: { ...current.draft, name: event.target.value } } : current,
-                )
-              }
-              required
-            />
-            <TextField
-              label={t("presets.description")}
-              value={editing?.draft.description ?? ""}
-              onChange={(event) =>
-                setEditing((current) =>
-                  current
-                    ? { ...current, draft: { ...current.draft, description: event.target.value } }
-                    : current,
-                )
-              }
-            />
-            <TextField
-              label={t("presets.systemPrompt")}
-              multiline
-              minRows={3}
-              value={editing?.draft.system_prompt ?? ""}
-              onChange={(event) =>
-                setEditing((current) =>
-                  current
-                    ? { ...current, draft: { ...current.draft, system_prompt: event.target.value } }
-                    : current,
-                )
-              }
-              required
-            />
-            <TextField
-              label={t("presets.userTemplate")}
-              helperText={t("presets.templateHint")}
-              multiline
-              minRows={4}
-              value={editing?.draft.user_template ?? ""}
-              onChange={(event) =>
-                setEditing((current) =>
-                  current
-                    ? { ...current, draft: { ...current.draft, user_template: event.target.value } }
-                    : current,
-                )
-              }
-              required
-            />
-            <TextField
-              label={t("presets.temperature")}
-              type="number"
-              slotProps={{ htmlInput: { step: 0.1, min: 0, max: 2 } }}
-              value={editing?.draft.temperature ?? 0.3}
-              onChange={(event) =>
-                setEditing((current) =>
-                  current
-                    ? {
-                        ...current,
-                        draft: { ...current.draft, temperature: Number(event.target.value) },
+              {preset.is_builtin ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t("presets.duplicate")}
+                      onClick={() =>
+                        setEditing({
+                          id: null,
+                          draft: { ...toDraft(preset), name: t("presets.copyOf", { name }) },
+                        })
                       }
-                    : current,
-                )
-              }
-            />
-          </Stack>
+                    >
+                      <Copy className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("presets.duplicate")}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("presets.edit")}
+                    onClick={() => setEditing({ id: preset.id, draft: toDraft(preset) })}
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("presets.delete")}
+                    onClick={() => void remove(preset)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </Card>
+
+      <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editing?.id ? t("presets.edit") : t("presets.new")}</DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <Field label={t("presets.name")}>
+              {(id) => (
+                <Input
+                  id={id}
+                  value={editing?.draft.name ?? ""}
+                  onChange={(event) => patch({ name: event.target.value })}
+                  required
+                />
+              )}
+            </Field>
+
+            <Field label={t("presets.description")}>
+              {(id) => (
+                <Input
+                  id={id}
+                  value={editing?.draft.description ?? ""}
+                  onChange={(event) => patch({ description: event.target.value })}
+                />
+              )}
+            </Field>
+
+            <Field label={t("presets.systemPrompt")}>
+              {(id) => (
+                <Textarea
+                  id={id}
+                  rows={3}
+                  value={editing?.draft.system_prompt ?? ""}
+                  onChange={(event) => patch({ system_prompt: event.target.value })}
+                  required
+                />
+              )}
+            </Field>
+
+            <Field label={t("presets.userTemplate")} hint={t("presets.templateHint")}>
+              {(id) => (
+                <Textarea
+                  id={id}
+                  rows={4}
+                  className="font-mono text-sm"
+                  value={editing?.draft.user_template ?? ""}
+                  onChange={(event) => patch({ user_template: event.target.value })}
+                  required
+                />
+              )}
+            </Field>
+
+            <Field label={t("presets.temperature")}>
+              {(id) => (
+                <Input
+                  id={id}
+                  type="number"
+                  step={0.1}
+                  min={0}
+                  max={2}
+                  value={editing?.draft.temperature ?? 0.3}
+                  onChange={(event) => patch({ temperature: Number(event.target.value) })}
+                />
+              )}
+            </Field>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditing(null)}>
+              {t("presets.cancel")}
+            </Button>
+            <Button onClick={() => void save()}>{t("presets.save")}</Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setEditing(null)}>{t("presets.cancel")}</Button>
-          <Button variant="contained" onClick={() => void save()}>
-            {t("presets.save")}
-          </Button>
-        </DialogActions>
       </Dialog>
-    </Stack>
+    </div>
   );
 }

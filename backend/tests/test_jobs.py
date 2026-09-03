@@ -88,3 +88,89 @@ async def test_uploading_requires_a_session(client: AsyncClient, sample_audio: P
         )
 
     assert response.status_code == 401
+
+
+async def test_several_files_become_one_recording(
+    client: AsyncClient, admin: dict[str, str], sample_audio: Path
+) -> None:
+    """Parts of one meeting, handed over together.
+
+    A recording split across three cards is one recording; asking for three
+    transcripts and stitching them by hand is what this saves.
+    """
+    await client.post("/api/auth/login", json=admin)
+
+    with sample_audio.open("rb") as first, sample_audio.open("rb") as second:
+        response = await client.post(
+            "/api/jobs",
+            files=[
+                ("file", ("part-one.wav", first, "audio/wav")),
+                ("file", ("part-two.wav", second, "audio/wav")),
+            ],
+        )
+
+    assert response.status_code == 201
+    job = response.json()
+    assert job["title"] == "part-one.wav +1"
+    assert job["source_ref"] == "part-one.wav, part-two.wav"
+
+
+async def test_a_recording_says_how_many_files_it_was_made_of(
+    client: AsyncClient, admin: dict[str, str], sample_audio: Path
+) -> None:
+    """Counted rather than inferred from the names: a filename may hold a comma,
+    and a list that splits wrong would mislabel the row in the archive."""
+    await client.post("/api/auth/login", json=admin)
+
+    with sample_audio.open("rb") as first, sample_audio.open("rb") as second:
+        joined = (
+            await client.post(
+                "/api/jobs",
+                files=[
+                    ("file", ("Ivanov, A. - part one.wav", first, "audio/wav")),
+                    ("file", ("part-two.wav", second, "audio/wav")),
+                ],
+            )
+        ).json()
+
+    with sample_audio.open("rb") as handle:
+        alone = (
+            await client.post("/api/jobs", files={"file": ("meeting.wav", handle, "audio/wav")})
+        ).json()
+
+    assert (await client.get(f"/api/jobs/{joined['id']}")).json()["parts"] == 2
+    assert alone["parts"] == 1
+
+
+async def test_files_sent_separately_can_still_be_one_batch(
+    client: AsyncClient, admin: dict[str, str], sample_audio: Path
+) -> None:
+    """One upload each, but submitted together.
+
+    The archive shows them as a group, so they need something in common; the
+    client names the batch because it is the only party that knows the pile is
+    a pile before the first file has been sent.
+    """
+    await client.post("/api/auth/login", json=admin)
+    batch = "01a02a70-0000-7000-8000-000000000001"
+
+    created = []
+    for name in ("one.wav", "two.wav"):
+        with sample_audio.open("rb") as handle:
+            created.append(
+                (
+                    await client.post(
+                        "/api/jobs",
+                        files={"file": (name, handle, "audio/wav")},
+                        data={"batch": batch},
+                    )
+                ).json()
+            )
+
+    with sample_audio.open("rb") as handle:
+        alone = (
+            await client.post("/api/jobs", files={"file": ("meeting.wav", handle, "audio/wav")})
+        ).json()
+
+    assert [job["batch_id"] for job in created] == [batch, batch]
+    assert alone["batch_id"] is None

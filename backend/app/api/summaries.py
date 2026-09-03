@@ -9,7 +9,7 @@ from sqlalchemy import or_, select
 
 from app.deps import CurrentUserDep, SessionDep, SettingsDep
 from app.errors import ApiError
-from app.models import Job, Preset, Summary, Transcript, User
+from app.models import Job, Preset, Summary, Transcript, User, utcnow
 from app.schemas import SummaryIn, SummaryOut
 
 router = APIRouter(tags=["summaries"])
@@ -152,3 +152,63 @@ async def delete_summary(
     summary = await _owned_summary(session, user, summary_id)
     await session.delete(summary)
     await session.commit()
+
+
+@router.post("/summaries/{summary_id}/cancel")
+async def cancel_summary(
+    summary_id: uuid.UUID, user: CurrentUserDep, session: SessionDep
+) -> SummaryOut:
+    """The stop button the transcription path has had since milestone 2."""
+    summary = await _owned_summary(session, user, summary_id)
+
+    if summary.status == "queued":
+        summary.status = "cancelled"
+        summary.finished_at = utcnow()
+    elif summary.status == "running":
+        # The worker owns the request in flight; it polls for this and drops it.
+        summary.status = "cancelling"
+    else:
+        raise ApiError(
+            409,
+            "summary_not_cancellable",
+            f"A summary that is {summary.status} cannot be cancelled.",
+            status=summary.status,
+        )
+
+    await session.commit()
+    return _present(summary)
+
+
+@router.post("/summaries/{summary_id}/retry")
+async def retry_summary(
+    summary_id: uuid.UUID, user: CurrentUserDep, session: SessionDep
+) -> SummaryOut:
+    """Run the same preset again, in place.
+
+    Only for a summary that failed or was stopped: a finished one is a result
+    worth keeping, and asking for another is asking for another row.
+    """
+    summary = await _owned_summary(session, user, summary_id)
+
+    if summary.status not in ("failed", "cancelled"):
+        raise ApiError(
+            409,
+            "summary_not_retryable",
+            f"A summary that is {summary.status} is not retried.",
+            status=summary.status,
+        )
+
+    summary.status = "queued"
+    summary.progress = 0.0
+    summary.content = ""
+    summary.error_code = None
+    summary.error_params = None
+    summary.error_message = None
+    summary.worker_id = None
+    summary.heartbeat_at = None
+    summary.finished_at = None
+    # partials_json is deliberately kept: reduce is where a local model chokes,
+    # and the parts that already came back are the expensive half.
+
+    await session.commit()
+    return _present(summary)

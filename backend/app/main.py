@@ -4,15 +4,30 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import auth, health, jobs, presets, providers, setup, summaries
+from app.api import (
+    auth,
+    health,
+    jobs,
+    presets,
+    providers,
+    public,
+    search,
+    setup,
+    summaries,
+    tokens,
+    users,
+)
+# Aliased: `settings` is the name of the configuration object everywhere else
+# in this module, and the router must not shadow it.
+from app.api import settings as settings_api
 from app.config import Settings
 from app.db import Database
 from app.errors import register_error_handlers
 from app.migrator import upgrade_to_head
 from app.secrets import load_or_create_secret
-from app.seed import seed_builtin_presets, seed_providers
+from app.seed import seed_builtin_presets, seed_providers, seed_webhook
 from app.sessions import SessionSigner
-from app.static import mount_frontend
+from app.static import mount_frontend, mount_share_preview
 
 
 @asynccontextmanager
@@ -27,6 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     async with app.state.db.session_factory() as session:
         await seed_providers(session, settings, app.state.secret)
+        await seed_webhook(session, settings, app.state.secret)
         await seed_builtin_presets(session)
 
     try:
@@ -46,5 +62,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(providers.router, prefix="/api")
     app.include_router(presets.router, prefix="/api")
     app.include_router(summaries.router, prefix="/api")
+    app.include_router(search.router, prefix="/api")
+    app.include_router(public.router, prefix="/api")
+    app.include_router(tokens.router, prefix="/api")
+    app.include_router(settings_api.router, prefix="/api")
+    app.include_router(users.router, prefix="/api")
+    mount_share_preview(app, app.state.settings.frontend_dist)
     mount_frontend(app, app.state.settings.frontend_dist)
     return app

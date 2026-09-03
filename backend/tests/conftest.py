@@ -13,9 +13,19 @@ ADMIN_CREDENTIALS = {"username": "admin", "password": "correct horse battery sta
 
 
 @asynccontextmanager
-async def running_client(settings: Settings) -> AsyncIterator[AsyncClient]:
+async def running_client(
+    settings: Settings,
+    probe_client_factory: object | None = None,
+    webhook_client_factory: object | None = None,
+) -> AsyncIterator[AsyncClient]:
     """Start the app for real -- lifespan included, so migrations actually run."""
     application = create_app(settings)
+    # The two places the API itself dials out. Stub servers rather than
+    # patches, so the requests are really made and really parsed.
+    if probe_client_factory is not None:
+        application.state.probe_client_factory = probe_client_factory
+    if webhook_client_factory is not None:
+        application.state.webhook_client_factory = webhook_client_factory
     async with application.router.lifespan_context(application):
         transport = ASGITransport(app=application)
         async with AsyncClient(transport=transport, base_url="http://testserver") as ac:

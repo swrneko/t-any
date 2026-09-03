@@ -1,3 +1,4 @@
+import socket
 from pathlib import Path
 from typing import Literal
 
@@ -20,9 +21,38 @@ class Settings(BaseSettings):
 
     max_upload_size: int = 5 * 1024**3
 
+    # How often the worker applies the retention policies. Hourly is plenty:
+    # the shortest policy anyone can set is a day.
+    retention_sweep_seconds: float = 3600.0
+
     sse_poll_seconds: float = 1.0
     cancel_poll_seconds: float = 1.0
     heartbeat_stale_seconds: float = 120.0
+
+    # How long a worker may go without showing a sign of life before its own
+    # container calls it dead. Generous next to the two seconds an idle loop
+    # takes to come round: a restart costs a claimed job its progress.
+    worker_stale_seconds: float = 60.0
+
+    # How long to wait for a remote server to answer at all. The body itself is
+    # given no deadline: a long recording takes as long as it takes.
+    download_connect_seconds: float = 30.0
+
+    # Off by default: an account on this instance must not become a way to read
+    # the cloud metadata endpoint or the router's admin page. Turn it on when the
+    # point of the instance is pulling recordings off your own NAS.
+    allow_private_network_urls: bool = False
+
+    # The extractor is a binary, not a library: it updates far more often than
+    # this application does, and an operator has to be able to point at a newer
+    # one without waiting for a release here.
+    ytdlp_bin: str = "yt-dlp"
+
+    # No OpenAI-compatible endpoint exists for diarisation, so this is not a
+    # provider row: it is one URL, set by the operator, pointing at a container
+    # that is off unless someone turned it on. Unset means the feature is not
+    # offered rather than that it fails halfway through a job.
+    diarizer_url: str | None = None
 
     stt_retry_attempts: int = 3
     stt_retry_backoff_seconds: float = 2.0
@@ -46,7 +76,19 @@ class Settings(BaseSettings):
     # Every token would hammer SQLite; once a second is smooth enough to read.
     summary_flush_seconds: float = 0.5
 
+    # Where to POST a job's result when it finishes. Set by the operator, never
+    # by a user, which is why it is not subject to the private-address check:
+    # an automation endpoint on the same LAN is the normal case.
+    webhook_url: str | None = None
+    webhook_secret: str | None = None
+    webhook_timeout_seconds: float = 10.0
+
     auth_mode: AuthMode = "builtin"
+    # Usernames that are administrators whatever the database says, comma
+    # separated. Behind a proxy every identity arrives non-admin, so without
+    # this an instance would have nobody who can configure it; in builtin mode
+    # it is also the way back in when the only password is lost.
+    admin_users: str = ""
     proxy_user_header: str = "X-Remote-User"
     session_cookie_name: str = "ta_session"
     session_max_age_days: int = 30
@@ -54,6 +96,10 @@ class Settings(BaseSettings):
     # first thing everyone does is open http://localhost:8927, and a cookie
     # the browser silently drops looks exactly like a broken login.
     session_cookie_secure: bool = False
+
+    @property
+    def admin_usernames(self) -> frozenset[str]:
+        return frozenset(name.strip() for name in self.admin_users.split(",") if name.strip())
 
     @property
     def db_dir(self) -> Path:
@@ -74,6 +120,17 @@ class Settings(BaseSettings):
     @property
     def secret_key_path(self) -> Path:
         return self.data_dir / "secret.key"
+
+    @property
+    def worker_liveness_path(self) -> Path:
+        """Where a worker says it is still turning.
+
+        Named after the host rather than the process, so a restarted worker
+        reuses its own file instead of leaving one behind, and two workers on
+        one volume cannot vouch for each other. The check runs inside the
+        container it is asking about, which is what makes the name line up.
+        """
+        return self.tmp_dir / f"worker-{socket.gethostname()}.alive"
 
     def ensure_dirs(self) -> None:
         for directory in (self.db_dir, self.media_dir, self.tmp_dir):

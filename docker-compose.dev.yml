@@ -11,3 +11,38 @@ services:
 
   worker:
     image: tany:dev
+
+  # Everything that costs money, answered locally: transcription, summaries and
+  # diarisation, all three on one port. See dev/stub.py for what it does and
+  # does not pretend to be.
+  #
+  # Runs the application's own image -- it already carries ffmpeg, fastapi and
+  # uvicorn -- with the stub mounted over it, so there is nothing to build and
+  # editing the file needs only a restart of this one service.
+  #
+  # Point the providers at http://stub:8000/v1 (models: stub-stt, stub-llm) in
+  # Settings -> Providers. The published port is for a backend running outside
+  # compose, which reaches it at http://127.0.0.1:8931 instead.
+  #
+  # The diariser is the one of the three that is not a provider row, so it is
+  # turned on with `DIARIZER_URL=http://stub:8000` in .env -- deliberately not
+  # set here. Invented speaker labels are written onto the transcript and kept,
+  # so the fake diariser is something to switch on for a screenshot, never
+  # something to leave on beside a real transcription.
+  stub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tany:dev
+    restart: unless-stopped
+    working_dir: /srv
+    command: ["uvicorn", "stub:app", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      - ./dev:/srv:ro
+    ports:
+      - "${STUB_PORT:-8931}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
