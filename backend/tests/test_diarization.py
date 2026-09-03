@@ -10,6 +10,7 @@ from app.db import Database
 from app.diarize import DiarizerClient, Turn, assign_speakers
 from app.errors import ApiError
 from app.secrets import load_or_create_secret
+from app.stt import SttClient
 from app.worker import Worker
 from tests.conftest import ADMIN_CREDENTIALS, running_client
 from tests.stubs import DiarizerStub, SttStub
@@ -59,6 +60,101 @@ async def upload(client: AsyncClient, sample_audio: Path, *, diarize: bool = Fal
         )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+DIARIZED_JSON = {
+    "task": "transcribe",
+    "duration": 3.0,
+    "text": "Hello there. General Kenobi.",
+    "segments": [
+        {
+            "type": "transcript.text.segment",
+            "id": "seg_0",
+            "start": 0.0,
+            "end": 1.4,
+            "text": "Hello there.",
+            "speaker": "A",
+        },
+        {
+            "type": "transcript.text.segment",
+            "id": "seg_1",
+            "start": 1.4,
+            "end": 3.0,
+            "text": "General Kenobi.",
+            "speaker": "B",
+        },
+    ],
+}
+
+
+async def test_a_model_that_diarises_is_asked_for_the_speakers_with_the_words(
+    sample_audio: Path,
+) -> None:
+    """One request, one model, and the speakers arrive attached to the text.
+
+    Nothing here is merged afterwards: the segments come back already
+    attributed, which is the whole difference from asking two services and
+    lining their answers up by overlap.
+    """
+    stub = SttStub(DIARIZED_JSON)
+
+    async with stub.http_client() as http:
+        result = await SttClient(http).transcribe(
+            sample_audio, model="gpt-4o-transcribe-diarize"
+        )
+
+    assert stub.calls[0].fields["response_format"] == "diarized_json"
+    # Required above thirty seconds, and a meeting is always above thirty
+    # seconds. Sending it always is one fewer thing to be wrong about.
+    assert stub.calls[0].fields["chunking_strategy"] == "auto"
+    assert [segment.speaker for segment in result.segments] == ["A", "B"]
+    assert result.text == "Hello there. General Kenobi."
+
+
+async def test_a_model_that_cannot_answer_in_verbose_json_is_never_asked_to(
+    sample_audio: Path,
+) -> None:
+    """The format follows the model, not what the job wanted.
+
+    Reported as "STT-сервер ответил 400" on a recording nobody asked to
+    diarise: the provider was pointed at the diarising model, the job carried
+    no request for speakers, and so the old wording asked it for `verbose_json`
+    -- which is the one format it refuses. Whether the speakers are used is the
+    worker's business; whether they can be asked for at all is the model's.
+    """
+    stub = SttStub(DIARIZED_JSON)
+
+    async with stub.http_client() as http:
+        await SttClient(http).transcribe(sample_audio, model="gpt-4o-transcribe-diarize")
+
+    assert stub.calls[0].fields["response_format"] == "diarized_json"
+
+
+async def test_a_dated_snapshot_of_a_diarising_model_is_the_same_model(
+    sample_audio: Path,
+) -> None:
+    """Providers publish the same model under suffixed names -- OpenAI's own
+    error messages call this one `gpt-4o-transcribe-diarize-api-ev3` -- and a
+    name matched exactly would send the wrong format to every one of them."""
+    stub = SttStub(DIARIZED_JSON)
+
+    async with stub.http_client() as http:
+        await SttClient(http).transcribe(sample_audio, model="gpt-4o-transcribe-diarize-api-ev3")
+
+    assert stub.calls[0].fields["response_format"] == "diarized_json"
+
+
+async def test_an_ordinary_transcription_asks_for_nothing_of_the_sort(
+    sample_audio: Path,
+) -> None:
+    stub = SttStub()
+
+    async with stub.http_client() as http:
+        result = await SttClient(http).transcribe(sample_audio, model="whisper-1")
+
+    assert stub.calls[0].fields["response_format"] == "verbose_json"
+    assert "chunking_strategy" not in stub.calls[0].fields
+    assert [segment.speaker for segment in result.segments] == [None, None]
 
 
 def test_a_segment_takes_the_speaker_it_overlaps_most() -> None:
@@ -160,6 +256,109 @@ async def test_a_diarised_job_attributes_every_segment(tmp_path: Path, sample_au
         ]
         assert transcript["speakers"][0]["display_name"] is None
         assert len(diarizer.calls) == 1
+
+
+def settings_with_diarizing_stt(tmp_path: Path, **overrides: object) -> Settings:
+    """A transcription model that answers with speakers, and no diariser at all.
+
+    This is the whole point of the arrangement: the container with the model
+    weights in it does not have to exist.
+    """
+    return settings_with_diarizer(
+        tmp_path,
+        diarizer_url=None,
+        stt_model="gpt-4o-transcribe-diarize",
+        **overrides,
+    )
+
+
+async def test_a_transcribing_model_that_diarises_replaces_the_diariser(
+    tmp_path: Path, sample_audio: Path
+) -> None:
+    settings = settings_with_diarizing_stt(tmp_path)
+    diarizer = DiarizerStub(TWO_VOICES)
+
+    async with running_client(settings) as client:
+        job = await upload(client, sample_audio, diarize=True)
+
+        await run_worker_once(settings, SttStub(DIARIZED_JSON), diarizer)
+
+        transcript = (await client.get(f"/api/jobs/{job['id']}/transcript")).json()
+        assert [segment["speaker"] for segment in transcript["segments"]] == ["A", "B"]
+        # Renaming works the same way it does for the diariser's own labels.
+        assert [speaker["label"] for speaker in transcript["speakers"]] == ["A", "B"]
+        assert diarizer.calls == []
+        assert (await client.get(f"/api/jobs/{job['id']}")).json()["error_code"] is None
+
+
+async def test_the_offer_of_speakers_follows_the_model_as_well_as_the_container(
+    tmp_path: Path, sample_audio: Path
+) -> None:
+    """Two ways to answer the same question, and the UI asks one thing.
+
+    A checkbox that appeared only when a container was running would be missing
+    on an installation whose transcription model does the job by itself.
+    """
+    settings = settings_with_diarizing_stt(tmp_path)
+
+    async with running_client(settings) as client:
+        assert (await client.get("/api/setup/status")).json()["has_diarizer"] is True
+        # And the submission gate agrees with the status it just reported.
+        job = await upload(client, sample_audio, diarize=True)
+        assert job["diarize"] is True
+
+
+async def test_asking_a_diarising_model_afterwards_transcribes_the_recording_again(
+    tmp_path: Path, sample_audio: Path
+) -> None:
+    """The only way to ask this model who spoke is to ask it for the words too.
+
+    With a diariser of our own the transcript is read back and left alone,
+    because the two halves are separate requests to separate services. Here
+    they are one request, so wanting the speakers after the fact means paying
+    for the transcription a second time -- which is worth doing quietly rather
+    than refusing, since the alternative is a recording that can never have
+    speakers at all.
+    """
+    settings = settings_with_diarizing_stt(tmp_path)
+    stt = SttStub(DIARIZED_JSON)
+
+    async with running_client(settings) as client:
+        job = await upload(client, sample_audio)
+        await run_worker_once(settings, SttStub())
+
+        assert (await client.post(f"/api/jobs/{job['id']}/diarize")).status_code == 200
+        await run_worker_once(settings, stt)
+
+        transcript = (await client.get(f"/api/jobs/{job['id']}/transcript")).json()
+        assert [segment["speaker"] for segment in transcript["segments"]] == ["A", "B"]
+        assert (await client.get(f"/api/jobs/{job['id']}")).json()["error_code"] is None
+        assert stt.calls[0].fields["response_format"] == "diarized_json"
+
+
+async def test_a_recording_too_long_to_send_whole_says_so(
+    tmp_path: Path, sample_audio: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cutting it is not an option here, so the cap on a request is a cap on
+    the recording -- and it has to be said in those words.
+
+    The real number is 1400 seconds, which the endpoint reports as a sentence
+    at 1500 and as "the file might be corrupted" at 5000. Neither is something
+    to hand to somebody who uploaded a meeting.
+    """
+    monkeypatch.setattr("app.worker.DIARIZED_MAX_SECONDS", 1.0)
+    settings = settings_with_diarizing_stt(tmp_path)
+    stt = SttStub(DIARIZED_JSON)
+
+    async with running_client(settings) as client:
+        job = await upload(client, sample_audio, diarize=True)
+
+        await run_worker_once(settings, stt)
+
+        finished = (await client.get(f"/api/jobs/{job['id']}")).json()
+        assert finished["status"] == "failed"
+        assert finished["error_code"] == "diarized_too_long"
+        assert stt.calls == []
 
 
 async def test_a_job_nobody_asked_to_diarise_never_reaches_the_diariser(

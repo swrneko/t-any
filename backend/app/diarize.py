@@ -13,8 +13,13 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings
 from app.errors import ApiError
+from app.models import Provider
+from app.stt import diarizes
 
 # Diarisation is slower than transcription and has no streaming form: an hour of
 # audio on a CPU is minutes of waiting for one answer.
@@ -26,6 +31,31 @@ class Turn:
     start: float
     end: float
     speaker: str
+
+
+async def speakers_can_be_found(session: AsyncSession, settings: Settings) -> bool:
+    """Whether this instance can answer "who said that" at all, either way.
+
+    Two arrangements answer it. A diariser of our own, which is a container
+    with model weights in it and is off by default; or a transcription model
+    that reports speakers along with the words, in which case there is nothing
+    to install and nothing to merge. The UI asks one question and gets one
+    answer, because from where somebody is standing it is one feature.
+
+    The provider is looked up the same way the worker looks it up when it comes
+    to run the job -- default first, oldest next -- so what is offered here is
+    what will actually happen.
+    """
+    if settings.diarizer_url:
+        return True
+
+    provider = await session.scalar(
+        select(Provider)
+        .where(Provider.kind == "stt")
+        .order_by(Provider.is_default.desc(), Provider.created_at)
+        .limit(1)
+    )
+    return provider is not None and diarizes(provider.default_model or "")
 
 
 def diarizer_http_client(base_url: str) -> httpx.AsyncClient:

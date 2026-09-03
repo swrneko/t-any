@@ -11,9 +11,11 @@ from typing import Annotated
 from fastapi import APIRouter, File, Form, Request, Response, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.deps import CurrentUserDep, SessionDep, SettingsDep
+from app.diarize import speakers_can_be_found
 from app.errors import ApiError
 from app.exports import FORMATS, MEDIA_TYPES, Options, lines_from, render
 from app.models import Job, Segment, Share, Speaker, Transcript, User, utcnow
@@ -81,15 +83,16 @@ async def _owned_job(session: SessionDep, user: User, job_id: uuid.UUID) -> Job:
     return job
 
 
-def _check_diarizer(settings: Settings, diarize: bool) -> None:
+async def _check_diarizer(session: AsyncSession, settings: Settings, diarize: bool) -> None:
     """Refuse now rather than half an hour into the job.
 
-    Diarisation lives in a container that is off by default, and a request for
-    it that nothing can serve is worth saying immediately -- the alternative is
-    a recording that transcribes for twenty minutes and then reports a feature
-    the operator never turned on.
+    Speakers come either from a container that is off by default or from a
+    transcription model that reports them itself, and a request neither can
+    serve is worth saying immediately -- the alternative is a recording that
+    transcribes for twenty minutes and then reports a feature the operator
+    never turned on.
     """
-    if diarize and not settings.diarizer_url:
+    if diarize and not await speakers_can_be_found(session, settings):
         raise ApiError(
             503,
             "no_diarizer",
@@ -122,7 +125,7 @@ async def create_job(
         raise ApiError(422, "no_file", "Send at least one file.")
 
     names = [Path(one.filename or "upload").name for one in file]
-    _check_diarizer(settings, diarize)
+    await _check_diarizer(session, settings, diarize)
 
     job = Job(
         owner_id=user.id,
@@ -166,7 +169,7 @@ async def create_job_from_url(
     empty and the worker resolves the source the same way it would an upload.
     """
     source_type, title = parse_source_url(body.url)
-    _check_diarizer(settings, body.diarize)
+    await _check_diarizer(session, settings, body.diarize)
     # Answered now so a refused link says so immediately; the worker asks again
     # before it opens the socket, which is the check that actually protects.
     await ensure_allowed_host(body.url, allow_private=settings.allow_private_network_urls)
@@ -469,7 +472,7 @@ async def diarize_job(
     the whole of the work rather than the end of it.
     """
     job = await _owned_job(session, user, job_id)
-    _check_diarizer(settings, True)
+    await _check_diarizer(session, settings, True)
     _require_finished(job)
 
     if job.status != "done":

@@ -5,7 +5,7 @@ import os
 import socket
 import sys
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import timedelta
 from pathlib import Path
 
@@ -28,7 +28,9 @@ from app.sources import download_media, ensure_allowed_host, fetch_with_ytdlp
 from app.summary_runner import LlmFactory, SummaryRunner
 from app.stt import SttClient
 from app.stt import Segment as SttSegment
-from app.stt import Transcription, stt_http_client
+from app.stt import Transcription
+from app.stt import diarizes as stt_diarizes
+from app.stt import stt_http_client
 
 log = logging.getLogger("worker")
 
@@ -39,6 +41,14 @@ IDLE_POLL_SECONDS = 2.0
 
 # Failures worth repeating: the connection, not the request.
 RETRYABLE_CODES = frozenset({"stt_unreachable", "stt_server_error"})
+
+# How much audio a diarising model takes in one request. Measured against the
+# endpoint rather than read off a page: at 1500 seconds it answers "audio
+# duration 1500 seconds is longer than 1400 seconds which is the maximum for
+# this model", and at 83 minutes it stops explaining itself and says the file
+# might be corrupted. The protocol's 25 MB cap never binds before this one --
+# 1400 seconds at the bitrate we normalise to is under six megabytes.
+DIARIZED_MAX_SECONDS = 1400.0
 
 
 def worker_identity() -> str:
@@ -452,8 +462,22 @@ class Worker:
         # Recovery clears the stage when it requeues, so a crash cannot leave a
         # job claiming the work is nearly done when it has not started.
         if job.stage == "diarizing":
-            await self._rediarize(session, job, audio)
-            return
+            # A diariser of our own can attribute words that are already
+            # written down, and does. A transcription model that reports
+            # speakers cannot be asked half a question -- the only way to learn
+            # who spoke is to have it write the words again -- so this falls
+            # through to the ordinary path and pays for the transcription
+            # twice. Refusing instead would mean a recording that can never
+            # have speakers on an installation with no container to run.
+            if self.settings.diarizer_url:
+                await self._rediarize(session, job, audio)
+                return
+            if not audio.is_file():
+                raise ApiError(
+                    410,
+                    "audio_gone",
+                    "The recording is no longer on disk, and the speakers cannot be found without it.",
+                )
 
         # Normalised audio is the checkpoint: a job resumed after a crash skips
         # straight past ffmpeg, and the original upload is already gone by then.
@@ -483,7 +507,18 @@ class Worker:
         await session.commit()
 
         await self._enter(session, job, "transcribing")
-        chunks = await self._plan_chunks(audio, info.duration_sec)
+
+        # A model that reports speakers does its own cutting, and its labels
+        # only mean anything inside one request: two chunks sent separately come
+        # back with an "A" each, and they are not the same person. So a diarised
+        # recording goes in whole, and the chunk plan is not asked for.
+        speaking = job.diarize and stt_diarizes(model)
+        if speaking:
+            self._check_diarized_length(info.duration_sec)
+            chunks = [Chunk(index=0, start=0.0, end=max(info.duration_sec, 0.0))]
+        else:
+            chunks = await self._plan_chunks(audio, info.duration_sec)
+
         language = job.language
         collected: list[SttSegment] = []
         raw_parts: list[dict[str, object]] = []
@@ -509,6 +544,7 @@ class Worker:
                         start=segment.start + chunk.start,
                         end=segment.end + chunk.start,
                         text=segment.text,
+                        speaker=segment.speaker,
                     )
                     for segment in result.segments
                 )
@@ -529,7 +565,13 @@ class Worker:
         await session.flush()
 
         speakers: list[str | None] = [None] * len(collected)
-        if job.diarize:
+        if speaking:
+            # Already answered, by the same model in the same request. There is
+            # no stage for it and nothing to merge: the words arrived with the
+            # speaker attached rather than beside a second timeline.
+            speakers = [segment.speaker for segment in collected]
+            await self._record_speakers(session, job, speakers)
+        elif job.diarize:
             # The diariser reports nothing until it is done, so this stage has a
             # name and no number -- which is still more than a bar that stops.
             await self._enter(session, job, "diarizing")
@@ -614,13 +656,24 @@ class Worker:
 
         labels = assign_speakers([(item.start, item.end) for item in collected], turns)
 
+        await self._record_speakers(session, job, labels)
+        return labels
+
+    async def _record_speakers(
+        self, session: AsyncSession, job: Job, labels: Sequence[str | None]
+    ) -> None:
+        """The cast of the recording, listed once so the UI has names to change.
+
+        Whoever supplied the labels -- the diariser or a transcription model
+        that reports them itself -- they are stored the same way, because
+        renaming a speaker cannot depend on which of the two answered.
+        """
         # A re-run after a crash finds the previous attempt's names here.
         await session.execute(delete(Speaker).where(Speaker.job_id == job.id))
         session.add_all(
             Speaker(job_id=job.id, label=label)
             for label in dict.fromkeys(label for label in labels if label)
         )
-        return labels
 
     async def _transcribe_with_retries(
         self,
@@ -660,6 +713,27 @@ class Worker:
             f"The speech-to-text server failed {attempts} times in a row.",
             attempts=attempts,
             **last.params,
+        )
+
+    def _check_diarized_length(self, duration: float) -> None:
+        """The one limit that cannot be worked around by cutting.
+
+        A recording of any length is transcribed by cutting it into chunks, but
+        a recording whose speakers must stay the same speakers cannot be cut:
+        the labels mean nothing outside the request that produced them. So the
+        model's cap on one request is a cap on the whole recording, and it is
+        twenty-three minutes -- which is short enough that saying it plainly,
+        before a byte is uploaded, is the difference between a meeting that
+        cannot be diarised and a meeting that spends ten minutes finding out.
+        """
+        if duration <= DIARIZED_MAX_SECONDS:
+            return
+        raise ApiError(
+            413,
+            "diarized_too_long",
+            "This recording is too long to have its speakers found in one request.",
+            minutes=round(duration / 60),
+            limit=round(DIARIZED_MAX_SECONDS / 60),
         )
 
     async def _plan_chunks(self, audio: Path, duration: float) -> list[Chunk]:
