@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "transcribe-anything",
+    "name": "t-any",
     "tagline": "Transcribe anything, keep it yours"
   },
   "language": {
@@ -40,7 +40,6 @@
   "jobs": {
     "title": "Transcribe",
     "empty": "Nothing here yet. Drop in a file or paste a link to start.",
-    "drop": "Drop a file here, or click to choose one",
     "uploading": "Uploading {{name}}…",
     "noProvider": "No speech-to-text server is configured, so transcription will fail. Set STT_BASE_URL and restart.",
     "status": {
@@ -65,16 +64,13 @@
     "diarizeHint": "Slower, and only worth it for a conversation.",
     "openProviders": "Open providers",
     "inHistory": "{{total}} in the archive",
-    "mode": {
-      "single": "One recording",
-      "batch": "Several files"
-    },
     "dropMany": "Drop files here, or click to choose",
     "mergedName": "{{total}} files as one recording",
     "uploadingCount": "Uploading {{done}} of {{total}}…",
     "merge": "Join into one recording",
     "mergeHint": "One transcript; the parts follow the order of the list.",
     "separateHint": "Every file becomes a recording of its own.",
+    "mergeOff": "Only applies to several files at once.",
     "start": "Start ({{total}})",
     "moveUp": "Move up",
     "moveDown": "Move down",
@@ -89,14 +85,31 @@
     "copied": "Copied",
     "language": "Language: {{language}}",
     "timestamps": "Timestamps",
+    "timeline": "The whole recording. Click to go to a moment.",
+    "find": "Find in the transcript",
+    "noHits": "nothing",
+    "previousHit": "Previous match",
+    "nextHit": "Next match",
+    "clearFind": "Clear",
+    "follow": "Follow the recording",
+    "followHint": "Keeps the line being spoken in view while the recording plays. Scrolling by hand switches it off.",
+    "lineHint": "Click to play from here, double-click to correct",
     "speakers": "Speakers:",
     "diarize": "Find the speakers",
-    "diarizeHint": "Sends the recording to the diariser. The words stay as they are.",
+    "diarizeHint": "Finds out who spoke. Depending on how this instance is set up, the recording may be transcribed again.",
     "rename": "Rename",
     "correct": "Correct this line",
     "corrected": "Corrected — clear the box to restore the original",
     "audioGone": "The recording was removed to free space; the words stayed.",
     "working": "This page updates itself when the transcript is ready."
+  },
+  "player": {
+    "play": "Play",
+    "pause": "Pause",
+    "seek": "Position in the recording",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "volume": "Volume"
   },
   "errors": {
     "setup_already_completed": "Setup has already been completed. Ask an administrator for an account.",
@@ -170,7 +183,8 @@
     "summary_not_cancellable": "That summary is already finished.",
     "summary_not_retryable": "That summary finished — ask for a new one instead.",
     "audio_gone": "The recording itself is gone; only the words are left",
-    "no_transcript": "This recording has no transcript yet"
+    "no_transcript": "This recording has no transcript yet",
+    "diarized_too_long": "This recording is {{minutes}} minutes long, and the model that finds speakers takes at most {{limit}} in one go. It cannot be split: speaker labels only mean anything inside one request. Transcribe it without speakers, or run a diariser of your own."
   },
   "summary": {
     "title": "Summaries",
@@ -201,6 +215,10 @@
       "brief": {
         "name": "Brief summary",
         "description": "A few sentences on what this was about"
+      },
+      "retelling": {
+        "name": "Short retelling",
+        "description": "What was said, start to finish, in a paragraph or two"
       },
       "detailed": {
         "name": "Detailed notes by topic",
@@ -369,6 +387,34 @@
     "confirmDeleteMany": "{{n}} recordings go, with their transcripts, summaries and share links.",
     "confirmAudioOne": "The words stay. Only the audio goes, and the player falls silent.",
     "confirmAudioMany": "The words stay for all {{n}}. Only the audio goes.",
-    "frees": "Frees {{size}}."
+    "frees": "Frees {{size}}.",
+    "range": "{{from}}–{{to}} of {{total}}",
+    "perPage": "Rows per page",
+    "previous": "Previous page",
+    "next": "Next page",
+    "noMatch": "Nothing here matches the filters.",
+    "filters": {
+      "period": {
+        "label": "Date",
+        "any": "Date",
+        "today": "Today",
+        "week": "Last 7 days",
+        "month": "Last 30 days"
+      },
+      "length": {
+        "label": "Length",
+        "any": "Length",
+        "short": "Under 5 min",
+        "medium": "5–30 min",
+        "long": "Over 30 min"
+      },
+      "kind": {
+        "label": "File type",
+        "any": "Type",
+        "audio": "Audio",
+        "video": "Video"
+      },
+      "reset": "Clear the search and the filters"
+    }
   }
 }

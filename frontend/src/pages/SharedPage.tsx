@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
 import { api, type ExportFormat, type ExportOptions, type SharedTranscript } from "@/api/client";
+import { AudioPlayer, Recording } from "@/components/AudioPlayer";
 import { ExportMenu } from "@/components/ExportMenu";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { ThemeSwitch } from "@/components/ThemeSwitch";
@@ -99,14 +100,10 @@ export function SharedPage() {
             </div>
 
             {transcript.has_audio && (
-              <audio
-                ref={player}
-                controls
-                preload="metadata"
-                src={api.sharedAudioUrl(token)}
-                onTimeUpdate={(event) => setPlayhead(event.currentTarget.currentTime)}
-                className="w-full"
-              />
+              <>
+                <Recording player={player} src={api.sharedAudioUrl(token)} />
+                <AudioPlayer player={player} onPlayhead={setPlayhead} />
+              </>
             )}
 
             <Card className="gap-0 p-4">

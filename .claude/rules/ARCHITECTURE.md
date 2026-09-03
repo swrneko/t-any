@@ -38,6 +38,8 @@ them readable in order.
 ├── docker-compose.yml          published image; .dev.yml overrides with build
 ├── SPEC.md                     design decisions with rationale (Russian)
 ├── diarizer/                   the only image with an ML library; profile "diarize"
+├── dev/stub.py                 STT + LLM + diariser, answered locally and free;
+│                               a `stub` service in .dev.yml, no build of its own
 ├── backend/
 │   ├── app/
 │   │   ├── main.py             app factory + lifespan (migrations, db, secret)
@@ -80,15 +82,24 @@ them readable in order.
 │       └── stubs.py            stand-in STT server (a stub, never a patch)
 └── frontend/src/
     ├── api/client.ts           fetch wrapper, throws ApiError with a code
-    ├── index.css               the whole theme: two oklch palettes, one import
+    ├── index.css               the whole theme: two oklch palettes, the motion
+    │                           and glass tokens, one import
     ├── i18n.ts + locales/      en, ru
     ├── useApiError.ts          error code -> translated message
     ├── lib/utils.ts            cn(), the only thing shadcn needs from us
     ├── lib/language.ts         a code from the API -> a name in the UI's language
+    ├── lib/motion.ts           view transitions and the ripple's coordinates
+    ├── lib/time.ts             a position in a recording, hours only if any
+    ├── lib/paragraphs.ts       segments -> paragraphs, runs, and the find
+    ├── lib/speakers.ts         a label -> one of six colours, held by name
     ├── useJobFeed.ts           one job feed above the router: queue vs archive
     ├── components/ui/          shadcn components, owned and editable
-    ├── components/             AppShell, AuthLayout, Field, JobList, ExportMenu,
-    │                           ShareDialog, Theme/LanguageSwitch
+    ├── components/             AppShell (+ useBarSlot: a screen's own controls,
+    │                           rendered into the bar's island),
+    │                           ArchiveBar, AudioPlayer, AuthLayout,
+    │                           Field, JobList, ExportMenu, MorphLink, Pager,
+    │                           ShareDialog, Theme/LanguageSwitch,
+    │                           TranscriptSearch, TranscriptTimeline
     └── pages/                  Setup, Login, Jobs (the queue), History (archive
                                 and search), Transcript, Settings (a shell over
                                 settings/*), Shared (no account needed)
@@ -101,6 +112,24 @@ them readable in order.
    abstraction. The one place in this repository that imports a model library
    is `diarizer/`, which is a separate image behind a compose profile because
    no OpenAI-compatible endpoint for diarisation exists to point at.
+
+   There is now a second way to learn who spoke, and it is not a fourth client:
+   `gpt-4o-transcribe-diarize` answers the transcription protocol with a format
+   that carries speakers, so it is the STT client asking a different question
+   rather than a diariser wearing its clothes. Which arrangement is in play is
+   read off the model name (`stt.DIARIZING_MODELS`) -- a table rather than a
+   probe, because `diarized_json` is a format one model accepts and every other
+   endpoint rejects, so asking costs a failed job. Two consequences fall out of
+   it. The recording is not chunked: those labels only mean anything inside one
+   request, and two chunks come back with an "A" each who are not the same
+   person -- so the model's cap on one request is a cap on the whole recording,
+   and it is 1400 seconds. Twenty-three minutes, measured against the endpoint
+   rather than read off a page: at 1500 seconds it says so in a sentence, and
+   at 5000 it stops explaining and calls the file corrupt. That is short enough
+   to rule this model out for a meeting, which is why the length is checked
+   before a byte is uploaded and refused in those words.
+   And the UI asks one question either way: `has_diarizer` answers "can this
+   instance find speakers at all", by container or by model.
 2. **Raw STT output is immutable.** Exports (txt/md/srt/vtt) and user edits are
    layers computed on top; changing an export format never re-transcribes.
 3. **`owner_id` exists from the first migration.** Retrofitting it later would
@@ -115,13 +144,339 @@ them readable in order.
    `index.css` are the only place a value is written, so replacing them
    replaces the theme. `--warning` and `--success` were added to that set
    because this app reports degraded configuration and finished work, which
-   the shadcn defaults have no colour for.
+   the shadcn defaults have no colour for. `--speaker-1` to `--speaker-6` were
+   added for the same reason and are hues rather than steps of one scale,
+   because they answer "a different person" and not "further along" -- the chart
+   set could not be borrowed, since in dark it is four blues and a teal. Six is
+   the count, and they are written at the lightness a name has to be legible at,
+   since one value paints both a block on the timeline and the name over a
+   paragraph. The classes are spelled out in `lib/speakers.ts` rather than
+   assembled, because Tailwind reads that file as text and `bg-speaker-${n}` is
+   a class nobody generated. Glass is named the same way: a
+   surface asks for `glass` or `glass-raised`, and how translucent that is, how
+   far it blurs, what edge it carries and how it is lit are values written once
+   beside the palettes. The lighting is a bevel from directly above -- a lit top
+   edge, the light coming back up off the bottom one, the body's own shade under
+   both -- written into the offsets rather than measured, because nothing here
+   travels across the viewport and a measurement would return the same answer
+   every frame. A control asks for `glass-control` instead, which is the same
+   surface minus the return light: on a thirty-two pixel button that bounce
+   lands against the hairline it is a pixel inside of, and two light lines a
+   pixel apart are not thickness, they are a border drawn twice.
 
-7. **The queue and the archive are different questions.** The home page answers
+   `panel` is the other half of that and the more common one. Grouping is not
+   floating: a region of a page that merely says "these things belong together"
+   gets a tonal step and nothing else -- `--group`, one shade off the
+   background, downward in light and upward in dark. No edge and no elevation,
+   because an outline is a boundary worth defending and a shadow is a claim to
+   be above the page. And a card inside a panel gives up its fill and its
+   shadow and keeps its hairline (one unlayered rule on
+   `[data-panel] [data-slot="card"]`, unlayered because a layered rule cannot
+   outrank a utility) -- it is a division of the panel, not a second surface
+   stacked on the first.
+
+   **Nothing inside the page is frosted.** `--group` is an opaque colour and
+   `main .glass` drops its blur for `--card`, which is what that glass resolves
+   to over the background in either palette. This is not a preference, it is
+   forced: an element at less than full opacity is its own backdrop root, so
+   for the whole length of a screen's fade every frosted surface inside it has
+   nothing behind it to sample and is not frosted. The blur can then only
+   arrive in one step at the end -- discretely, never smoothly -- and that step
+   is what reads as every block on the page flickering. Standing the surfaces
+   in for themselves during the fade moves the step; it does not remove it. A
+   colour is the same colour at every opacity, so the page fades as one piece.
+   Nothing is lost: the blur was only ever hiding the ruled grid, and an opaque
+   shade hides it perfectly. Glass is left to what floats above the page and
+   never fades with it -- the bar, a menu, a dialog -- and those are all
+   outside `main`, which is what the selector says.
+
+   Fields were the hole in that and the plainest version of it: an input, a
+   textarea and a select trigger asked for `bg-glass`, which is the fill
+   without the surface -- no blur ever came with it -- so the grid ran straight
+   through the middle of a control. Inside `main` they take `--card` at rest
+   and `--muted` on focus, which is what the frosting would have resolved to
+   and a step that exists in both palettes; on a white card there is no lighter
+   left to go, so focus steps down rather than up.
+
+7. **The UI names durations and curves, never picks them either.** Material's
+   four easings and the duration buckets are `:root` variables outside both
+   palettes, because how long a thing takes to move is not a question light and
+   dark answer differently. A component writes `duration-(--motion-medium)
+   ease-emphasized`, never `duration-300 ease-out`.
+
+8. **Motion is decoration over a layout that already works.** Every transition
+   is a view transition or a CSS animation, so a browser without
+   `startViewTransition` and a person who asked for reduced motion both get the
+   same state change with nothing animating it -- `lib/motion.ts` checks for
+   both before it starts anything, and one media query flattens every duration
+   in the stylesheet. No animation library is installed, and none is wanted:
+   what is animated here is the browser's own before/after of a DOM change.
+
+9. **One change, one animation.** A view transition renders the new state live
+   inside its own snapshot, so anything the page would have animated by itself
+   keeps animating in there, against the transition drawn over it -- the same
+   movement described twice, on two clocks, which is what reads as a stutter.
+   Three rules keep it to one. Entry animations are finished before the new
+   state is captured (`settle()` in `lib/motion.ts`). Ordinary transitions are
+   flattened for the length of the morph, so nothing eases underneath it. And a
+   `view-transition-name` is declared for the one kind of change it is true of
+   -- `data-morph="quiet"` beside it, taken away by the stylesheet for every
+   other kind -- because a name left on permanently lifts its element out of the
+   picture for the palette change and the list reorder as well, to cross-fade
+   alone over both.
+
+   **A screen change is not a view transition.** It was one, four times over:
+   a cross-fade, then a fade-through in two halves, then the root held still
+   with only a named page region fading. Every version was reported -- as the
+   background flickering, as the inputs flickering, as the page changing shade
+   and changing back, and finally as the page arriving squashed again. All of
+   it is one thing. A view transition photographs the whole document, so the
+   grid, the drifting light, the panels and every field are inside the picture
+   and anything done to it is done to all of them at once, while whatever
+   carries a name is captured apart and stands perfectly still -- that
+   asymmetry is the flicker. Name the page region instead and its box is
+   interpolated between two heights, which is the squashing, because an engine
+   is free to stretch the picture into the box and `object-fit: none` did not
+   stop Firefox doing it.
+
+   So an ordinary navigation opens no transition at all. It is a plain
+   navigation, and the arriving screen brings itself in with a CSS animation
+   (`page-in`, keyed on the first segment of the address so React treats it as
+   an arrival) -- opacity and twelve pixels of travel. The travel is not
+   decoration: in the dark palette a panel is nine values out of 255 from the
+   background it fades up from, so opacity alone is nine discrete steps held
+   four frames each, and it was reported as exactly that. CSS has no dithering
+   and there are no more levels to find; a moving edge is the only thing left
+   that the eye can follow instead. There is no photograph, so there is no box, nothing to stretch,
+   no frosted surface standing in for itself and no window in which the page on
+   screen is not the page. The outgoing screen is not faded out -- it is simply
+   gone -- so two screens are never both on the window and the doubling a
+   cross-fade produces cannot happen. A settings section does the same one level
+   in, and it is keyed on the section rather than on the address: `/settings`
+   is a real render before it is a redirect -- the index route is a
+   `<Navigate>` -- so an address key mounts the panel once empty, fades it in,
+   and mounts it again a tick later with the section that was meant. Two blinks
+   on every arrival, two more on every press of the gear. Resolved to a section,
+   `/settings` and `/settings/users` are one key and one arrival.
+
+   There is no exception, and there was one until it was looked at. A row
+   opening its page kept a transition, on the reasoning that there really is one
+   thing travelling: the row was named, the transcript's frame carried the same
+   name, the box travelled between them. It is the same defect at its worst
+   rather than a case the defect spares. A named box is interpolated between the
+   height it had and the height it will have, and this box runs from a 69-pixel
+   row to a 250-pixel page -- the largest such box in the app, so the picture
+   stretched into it is stretched furthest. Reported, in the end, in exactly the
+   words every earlier version was: it squashes like it used to. Opening a
+   recording is now a plain navigation like every other.
+
+   `quiet` is what is left for changes inside one screen that are not
+   navigations at all -- a list reordering, a staged file leaving -- where the
+   rows carry names and the rest of the document is told to swap outright.
+
+   Two more things have to be true for any of it to hold. `BrowserRouter` is
+   mounted with `useTransitions={false}`, because a
+   navigation marked as a React transition is exactly what `flushSync` will not
+   flush, and the browser would photograph "after" from a DOM still showing the
+   old screen. And the element carrying a name has to survive the whole trip:
+   the transcript page names the frame all its states share rather than the
+   card inside it, since replacing a named element mid-flight makes the browser
+   abandon the transition. `scrollbar-gutter: stable` belongs to the same
+   family -- without it a short page and a long one have viewports of different
+   widths, and the centred column arrives half a scrollbar away from where it
+   left.
+
+   Last, a name takes its element out of the surface it belongs to, and that
+   is the price of travelling -- worth paying only when the surface is leaving
+   anyway. The selected pill in the app bar and in the settings list used to
+   travel from one item to the next, and both are lifted out of a surface that
+   stays: for the length of the trip the item being walked to was missing from
+   the list, because its picture was the one still in flight, and the item
+   being left was missing from it as well. What the eye got was a background
+   sliding between two blanks. Naming the highlight alone rather than the
+   control is the same defect from the other side -- lifted, it is drawn over
+   the picture it came out of, so the background arrived above the icon it is
+   supposed to sit behind. Neither is the change that actually happened:
+   two controls changed state where they stand, so they cross-fade where they
+   stand, inside their surface's own picture, and nothing is named.
+
+10. **Nothing that is read is resized.** A screen, a card or a row never
+    arrives or leaves by scaling. At 99% every edge, every gap and every line
+    of text is a percent off, and the real thing is on screen a moment later to
+    be compared against, so it reads as the page turning up squashed and then
+    unfolding -- not as depth. It was reported twice, on two different screens,
+    as "the page shrinks and then goes back to normal", which is `scale(0.99)`
+    described exactly. Entrances fade, and move only where the thing moving is
+    smaller than the window: `rise` is translate plus opacity, a screen swap is
+    not animated at all (see 9), and a drop zone with a file over it lights up
+    rather than swelling. Scale is left to two cases --
+    things too small to be read while they move (a switch thumb, a checkbox,
+    the logo badge), and surfaces that grow out of nothing and so have no
+    earlier size to be judged against (a menu, a dialog, a tooltip). A button
+    is in neither: it carries a label, and pressing it to 97% and letting it
+    grow back was the same complaint at the size of a control -- reported as
+    the click feeling like lag rather than an answer. The press is answered by
+    the ink alone, out fast and gone inside the control bucket, and a press
+    whose ink is still spreading when the screen changes is finished by
+    `settle()` along with everything else the transition supersedes.
+
+    The browser can do it to us too, and did: the box around a captured screen
+    animates between the height it had and the height it is going to have, and
+    an engine that stretches the picture to fill that box draws the page short
+    and lets it unfold. Firefox does, Chrome does not, which is why this one
+    only ever reproduced in one browser. So it is forbidden rather than
+    arranged around: `::view-transition-old(*)`/`new(*)` carry
+    `object-fit: none` anchored top-left, which says the picture is never
+    scaled whatever the box does, and let it overflow. Matching the box to the
+    picture is not enough on its own -- the engine decides whether the picture
+    obeys the box.
+
+    There are no exceptions, and there used to be one. The container transform
+    -- a row growing into the page it opens -- said `object-fit: cover` on
+    purpose, on the reasoning that there the box *is* the shape being morphed.
+    Cover magnified the row's photograph three and a half times on the way, and
+    removing it only exposed the layer underneath: the box itself still ran from
+    69 pixels to 250, and an engine that stretches a picture into its box drew
+    the page squashed exactly as before. The trip is gone (see 9), and with it
+    the last view transition opened on a navigation.
+
+    The other half of that is to name only boxes that stay the same size when
+    their contents are not what changed. A named box is interpolated between
+    the height it had and the height it will have, and the page region is
+    precisely the box whose height differs on every screen -- naming it is what
+    "the page shrinks" was, every time it came back. It is not named now and
+    the screen change is not a transition at all (see 9); the app bar keeps its
+    name for the one transition that is left, and it is one size.
+
+11. **The queue and the archive are different questions.** The home page answers
    "what is happening now" and the history page answers "what do I have"; a job
    appears on the first until it is terminal, and stays there for the rest of
    the session so it does not vanish under the eye that is watching it. Two
    lists holding the same rows would leave neither of them meaning anything.
+
+12. **A transcript is read, not scrolled.** Eighty-four minutes came back as
+   nine hundred and sixty-eight segments, and one segment is one breath -- the
+   division is where the model stopped, not where anybody did. Stacked as nine
+   hundred rows it is a log with no way into it, so four things are true of the
+   page instead, and each of them answers a different question.
+
+   The lines are gathered into paragraphs for reading and kept whole underneath.
+   A new one starts when somebody else speaks, when the silence is long enough
+   to hear, or when the running block reaches a length worth resting the eye at
+   and a sentence ends -- with a hard cap for the speaker who never stops.
+   Nothing is merged in the data: a click still seeks to the line under the
+   cursor, a correction still belongs to one line, and a search hit still names
+   one. `lib/paragraphs.ts` is the whole of that, and it is pure.
+
+   The timeline is the only thing on the page that shows the recording rather
+   than a window into it -- who talked, when, and where the real silences are --
+   and it is the player's seek bar rather than a second bar under it. A line
+   showing position and a map showing shape are one control asked two questions;
+   drawn one above the other, with the same playhead on each, the position was
+   simply stated twice. So `AudioPlayer` takes a `track` and keeps the button,
+   the clock and the volume. The marker follows the element's own clock at one
+   frame apiece and is written straight onto the node -- `timeupdate` arrives
+   four times a second, which is a marker that hops, and re-rendering fifty
+   blocks to move one of them would be paying for the wrong thing. Sharing a row
+   with a clock has one more consequence:
+   the elapsed time is written in the total's shape (`formatClock(at, length)`),
+   since `0:00` growing into `1:23:30` is four characters appearing in a flex
+   row: everything beside them moves, and a seek bar that is `flex-1` breathes
+   in and out for the length of the recording. Tabular figures do not help when
+   it is the count of them that changes.
+   Runs, not segments: an hour and a half across six hundred
+   pixels is eight seconds to the pixel, so every ordinary pause is sub-pixel
+   and two hundred blocks each rounded up to something visible is a barcode
+   rather than a conversation. Gaps narrower than the bar can draw are joined,
+   which is what leaves a shape.
+
+   Finding a word is the page's own, over a transcript already in the browser:
+   it costs nothing, answers as it is typed, and counts corrections -- which the
+   archive's index only learns about by trigger. It counts lines rather than
+   occurrences, because "2 of 47" has to mean the same thing as the two arrows
+   beside it.
+
+   And all of it stays. Playing the recording, finding a word in it, seeing
+   where you are and getting it off the page are the same kind of act, and on a
+   page nine hundred lines long any of them scrolling away is a thing you have
+   to scroll back for. So the player, the timeline, the find bar and the export
+   controls are one element rendered in one of two places: under the title where
+   they belong, and -- once the page has carried them up to the app bar --
+   inside the bar's own island through `useBarSlot`, where they are the bar. One
+   glass, one edge, one shadow. Sticking them to the bar's underside was the
+   near miss: two surfaces a pixel apart are two surfaces however carefully they
+   are aligned, and being one thing is not something alignment can achieve.
+
+   The radius is the one the bar already had -- twenty-eight pixels, half the
+   lifted bar's height, which is what made it a pill -- so the corners do not
+   move when the surface grows; only how far down it reaches changes. The bar's
+   own radius is not animated, because `9999px` to `28px` interpolates through
+   shapes that all look the same and lands its one visible step at the end.
+
+   Position is `sticky`'s job and not the observer's, and that division is what
+   makes the move invisible. An observer answers at the end of a frame rather
+   than during the scroll, so on a wheel that moves a hundred pixels at a time
+   the panel had already sailed past the bar before anything was told, and
+   arrived by jumping back down to it -- which is what "it attaches abruptly"
+   was. Stuck at the bar's underside it parks on the browser's own clock, frame
+   for frame, and by the time the observer speaks it is already standing where
+   the bar will draw it: measured across the threshold, the top goes 100, 90,
+   80, 70, 69 and never once backwards, and a three-hundred-pixel step hands
+   over in one frame with one pixel of settle. The panel and the transcript
+   share one tall box for this, tall being the point -- it is what the panel
+   sticks inside -- and the mark is absolute, both so it costs no row and
+   because a mark inside a stuck element would never move again.
+
+   What is left for the move to do is the material, and what is smoothed is a
+   joint rather than a journey: nothing travels, since the controls are already
+   standing at the bar's underside when it happens. Two properties change and both interpolate
+   -- the top corners close from twenty-eight to nothing, and the panel's own
+   fill gives way to the bar's glass. `dock` and `undock` are animations and not
+   transitions, because changing parent is a full unmount and nothing carries
+   across that; they are applied only to a move, so a transcript opened straight
+   onto a scrolled position does not play the docking as though it had just
+   happened. Going out the fill is left alone: the bar has shrunk back to a pill
+   by the first frame, and starting transparent there would show the page
+   through the panel. The resting panel carries no shadow, and that is for the
+   joint rather than for taste -- a five-layer glass shadow has no matching
+   shape to interpolate towards, so it could only snap on and off.
+
+   Three things have to be true for the move to be invisible. The audio element
+   is mounted by the page and not by the controls (`Recording`), because
+   changing parent is a full unmount and the browser would reload the file and
+   start it again from zero, mid-sentence -- the controls hold nothing the
+   element does not, so mounted elsewhere they read it and are correct at once.
+   The header is `fixed` rather than sticky, so the bar growing by the controls'
+   height cannot push the page down -- and it would have pushed the mark that
+   decides when to dock down with it, back below the line, into a loop; `main`
+   carries a constant clearance instead. And the room the controls had is held
+   open while they are away, measured where they rest rather than where they
+   land, since docked they are three pixels shorter and reserving that would
+   pull the transcript up by three at the moment they left.
+
+   Being in the bar settles the frosting question too: docked, the controls are
+   outside `main` in the DOM, so `main :is(.glass, ...)` never sees them and
+   they carry no `page-in` fade of their own -- which is the whole of the
+   argument that nothing inside the page is frosted. At rest they are inside it
+   and take the card's own opaque material, which is what that rule asks for.
+   The whole thing fits in a hundred and thirty pixels only because the seek bar
+   and the map are one control; two of them plus a row of buttons was half again
+   as tall, which on a laptop is a quarter of the window spent on furniture.
+
+   The seek bar's working area is a rectangle and the pill around it is a frame.
+   A round end eats the first and last twelve pixels of a bar that tall, and
+   those are the beginning and the end of the recording -- the two positions on
+   it anybody can name. The dead margin either side is what curves, the marker
+   is free to hang over it at both extremes, and the click arithmetic needs
+   nothing said about any of it because it measures the element it is on, which
+   is the rectangle.
+
+   Following the audio is the fourth, and it is off the moment the reader takes
+   over: a wheel or a scrolling key means "let me read somewhere else", and only
+   the button turns it back on. It never scrolls while nothing is playing,
+   because a page that moves under a stationary eye is worse than one that does
+   not move at all. Nothing listens to `scroll` itself -- the page's own
+   scrolling would switch it off on its first frame.
 
 ## Status
 
@@ -193,6 +548,28 @@ overlap, with speakers renameable in one place.
 
 Known gaps left deliberately open:
 
+- The share page still lists one row per segment. Paragraphs, the timeline and
+  the find bar are all on the owner's page only; a public link to an
+  eighty-four-minute recording is still the wall of lines that page stopped
+  being. `intoParagraphs` is pure and the shared payload carries the same
+  segments and speakers, so this is a port rather than a design question.
+
+- The archive's pages are cut in the browser. `GET /api/jobs` answers with the
+  whole list and always did -- one feed above the router serves both screens,
+  and the queue needs every pending job whatever page the archive is showing --
+  so paging it on the server would mean a second endpoint and an SSE stream
+  that no longer matches it. What the pager saves is laying out four hundred
+  rows to read thirty, not bytes on the wire. At the size this is built for
+  that is the right trade; an archive of tens of thousands would want the other
+  one.
+
+- The archive's filters are cut in the browser beside its pages, and for the
+  same reason: the list is already there. Date and length are read off columns
+  the API returns; the file type is not a column at all -- the backend keeps
+  only what it extracted, so audio-or-video is guessed from the extension in
+  `source_ref`, and a link that names no file is neither and shows only while
+  the filter is off.
+
 - The upload limit is per file, not per recording. Ten files just under it are
   accepted as one job, and the joined result is however large it turns out to
   be; the limit protects the request, and the sum has no request to protect.
@@ -212,6 +589,16 @@ Known gaps left deliberately open:
   progress of its own -- the stage says what is happening and never says how
   far it has got. Streaming it would mean chunking two models against each
   other.
+- A model that transcribes and diarises at once is used for the speakers and
+  nothing else is asked of it: `known_speaker_names`/`known_speaker_references`
+  are not sent, so the voices come back as "A" and "B" and are renamed by hand
+  like the diariser's own labels. Handing it four reference clips would name
+  them from the start, and there is no screen for collecting those clips.
+- Asking that model for speakers after the fact transcribes the recording a
+  second time. With a diariser of our own the transcript is read back and left
+  alone; here the two halves are one request, so there is no half to ask for.
+  It is done quietly rather than refused -- the alternative is a recording that
+  can never have speakers on an installation with no container to run.
 - Diarisation can be asked for again on a finished recording, and the words are
   not asked for again with it -- but the whole recording goes back to the
   diariser every time. There is no way to attribute one stretch of it, and a
