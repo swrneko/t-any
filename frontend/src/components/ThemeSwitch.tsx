@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { morphTheme, revealFrom } from "@/lib/motion";
 
 const ICONS: Record<Theme, typeof Sun> = {
   light: Sun,
@@ -24,6 +25,16 @@ export function ThemeSwitch() {
   // under "system" those differ, and hiding that makes the control feel broken.
   const Current = resolved === "dark" ? Moon : Sun;
 
+  /** The new palette opens as a circle from the control that asked for it, so
+   *  the change reads as one thing spreading rather than the page blinking. */
+  const pick = (option: Theme, event: Event) => {
+    const box = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect();
+    if (box) {
+      revealFrom({ clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 });
+    }
+    void morphTheme(() => setTheme(option));
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -37,7 +48,7 @@ export function ThemeSwitch() {
           return (
             <DropdownMenuItem
               key={option}
-              onSelect={() => setTheme(option)}
+              onSelect={(event) => pick(option, event)}
               className={option === theme ? "bg-accent text-accent-foreground" : undefined}
             >
               <Icon className="size-4" />

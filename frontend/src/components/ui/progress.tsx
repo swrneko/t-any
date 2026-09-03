@@ -17,7 +17,7 @@ function Progress({
       data-slot="progress"
       value={indeterminate ? null : value}
       className={cn(
-        "relative h-2 w-full overflow-hidden rounded-full bg-primary/20",
+        "relative h-1.5 w-full overflow-hidden rounded-full bg-primary/15",
         className
       )}
       {...props}
@@ -25,7 +25,9 @@ function Progress({
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
         className={cn(
-          "h-full w-full flex-1 bg-primary transition-all",
+          // The bar catches up on Material's emphasised curve, so a chunk
+          // landing reads as progress moving rather than a value being set.
+          "h-full w-full flex-1 rounded-full bg-primary transition-transform duration-(--motion-long) ease-emphasized",
           indeterminate && "w-1/3 flex-none animate-progress-slide"
         )}
         style={indeterminate ? undefined : { transform: `translateX(-${100 - (value || 0)}%)` }}

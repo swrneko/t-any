@@ -50,8 +50,15 @@ export default function App() {
     );
   }
 
+  // A navigation is an urgent update here, not a React transition, which the
+  // router's default would make it. A transition is exactly what `flushSync`
+  // declines to flush, so the address changed, the view transition photographed
+  // "after" from a DOM that still held the old screen, and the real change
+  // landed live somewhere in the middle of the animation: every screen change
+  // was animated against itself. Nothing on these routes suspends, so there is
+  // nothing for concurrency to buy in exchange.
   return (
-    <BrowserRouter>
+    <BrowserRouter useTransitions={false}>
       <Routes>
         {/* Outside the gate on purpose: a share link is read by people with no
             account here, and sending them to a login screen defeats the link. */}

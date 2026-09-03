@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 export const THEMES = ["light", "dark", "system"] as const;
 export type Theme = (typeof THEMES)[number];
@@ -36,7 +43,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const resolved = theme === "system" ? (systemDark ? "dark" : "light") : theme;
 
-  useEffect(() => {
+  // Synchronously, because the palette is swapped inside a view transition:
+  // the new frame is captured the moment the state lands, and an effect that
+  // waited its turn would be captured wearing the old colours.
+  useLayoutEffect(() => {
     document.documentElement.classList.toggle("dark", resolved === "dark");
     document.documentElement.style.colorScheme = resolved;
   }, [resolved]);

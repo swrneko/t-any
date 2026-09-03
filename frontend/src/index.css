@@ -64,6 +64,62 @@
   --tracking-normal: -0.01em;
   --warning: oklch(0.5534 0.1290 65.0000);
   --success: oklch(0.5300 0.1300 150.0000);
+
+  /* Who is talking. Six hues rather than six steps of one, because they answer
+     "a different person" and not "more of the same thing" -- a scale would say
+     the fourth speaker is further along than the second. Spaced round the wheel
+     and held at one lightness, so they read as one family and no two neighbours
+     are the same colour; the chart set could not be borrowed for this because
+     in the dark palette it is four blues and a teal. Written at the lightness a
+     name has to be legible at, since the same value paints a block on the
+     timeline and the name above a paragraph. */
+  --speaker-1: oklch(0.5565 0.2430 261.9529);
+  --speaker-2: oklch(0.5553 0.2554 283.4559);
+  --speaker-3: oklch(0.5500 0.1100 195.0000);
+  --speaker-4: oklch(0.5300 0.1300 150.0000);
+  --speaker-5: oklch(0.5534 0.1290 65.0000);
+  --speaker-6: oklch(0.5600 0.1900 15.0000);
+
+  /* Glass. A translucent surface has no colour of its own worth naming -- what
+     it has is how much of what is behind it comes through, so these are the
+     same white the card is, carrying an alpha. */
+  --glass: oklch(1.0000 0 0 / 0.55);
+  --glass-raised: oklch(1.0000 0 0 / 0.74);
+  --glass-edge: oklch(1.0000 0 0 / 0.70);
+  --glass-sheen: oklch(1.0000 0 0 / 0.85);
+  --glass-glow: oklch(1.0000 0 0 / 0.45);
+  --glass-shade: oklch(0.1615 0.0105 285.1663 / 0.10);
+  --glass-blur: 20px;
+  --scrim: oklch(0.1615 0.0105 285.1663 / 0.32);
+
+  /* Material's elevation, tinted rather than black: a shadow the colour of the
+     surface it falls on is what keeps five levels from turning grey. */
+  --elevation-1: 0 1px 2px 0 oklch(0.1615 0.0105 285.1663 / 0.07),
+    0 1px 3px 1px oklch(0.1615 0.0105 285.1663 / 0.05);
+  --elevation-2: 0 1px 2px 0 oklch(0.1615 0.0105 285.1663 / 0.09),
+    0 3px 10px 2px oklch(0.1615 0.0105 285.1663 / 0.07);
+  --elevation-3: 0 2px 4px 0 oklch(0.1615 0.0105 285.1663 / 0.10),
+    0 8px 22px 4px oklch(0.1615 0.0105 285.1663 / 0.09);
+  --elevation-4: 0 4px 8px 0 oklch(0.1615 0.0105 285.1663 / 0.11),
+    0 18px 40px 8px oklch(0.1615 0.0105 285.1663 / 0.11);
+
+  /* The light behind the glass. Three blobs, drifting, so a blurred surface has
+     something to blur -- glass over a flat fill is just a grey rectangle. */
+  --ambient-1: oklch(0.5565 0.2430 261.9529 / 0.30);
+  --ambient-2: oklch(0.5553 0.2554 283.4559 / 0.26);
+  --ambient-3: oklch(0.7495 0.1297 210.9704 / 0.24);
+
+  /* The floor that light falls on. Two weights: every cell, and a heavier line
+     every fourth one. */
+  --grid-line: oklch(0.1615 0.0105 285.1663 / 0.055);
+  --grid-line-major: oklch(0.1615 0.0105 285.1663 / 0.10);
+
+  /* One tonal step off the background: enough to say "these belong together"
+     and not enough to be a box. The step is downward here and upward in the
+     dark palette, for the same reason Material's containers go the same two
+     ways -- a step has to be away from the page, and there is only one
+     direction left in each. */
+  --group: oklch(0.9613 0.0029 286.2000);
 }
 
 .dark {
@@ -118,6 +174,60 @@
   --shadow-2xl: 0px 10px 25px 0px hsl(0 0% 0% / 0.38);
   --warning: oklch(0.8000 0.1400 78.0000);
   --success: oklch(0.7600 0.1500 155.0000);
+
+  --speaker-1: oklch(0.7000 0.1600 262.0000);
+  --speaker-2: oklch(0.7200 0.1600 300.0000);
+  --speaker-3: oklch(0.7600 0.1100 195.0000);
+  --speaker-4: oklch(0.7600 0.1500 155.0000);
+  --speaker-5: oklch(0.8000 0.1400 78.0000);
+  --speaker-6: oklch(0.7400 0.1500 18.0000);
+
+  --glass: oklch(0.2200 0.0081 285.5768 / 0.55);
+  --glass-raised: oklch(0.2500 0.0100 285.5768 / 0.75);
+  --glass-edge: oklch(1.0000 0 0 / 0.09);
+  --glass-sheen: oklch(1.0000 0 0 / 0.13);
+  --glass-glow: oklch(1.0000 0 0 / 0.07);
+  --glass-shade: oklch(0 0 0 / 0.28);
+  --glass-blur: 22px;
+  --scrim: oklch(0.0500 0 0 / 0.62);
+
+  /* Dark surfaces cast almost nothing, so elevation here is mostly the light
+     edge above -- the shadow is kept only to seat the surface. */
+  --elevation-1: 0 1px 2px 0 oklch(0 0 0 / 0.40), 0 1px 3px 1px oklch(0 0 0 / 0.28);
+  --elevation-2: 0 1px 2px 0 oklch(0 0 0 / 0.45), 0 3px 12px 2px oklch(0 0 0 / 0.34);
+  --elevation-3: 0 2px 4px 0 oklch(0 0 0 / 0.48), 0 10px 26px 4px oklch(0 0 0 / 0.40);
+  --elevation-4: 0 4px 8px 0 oklch(0 0 0 / 0.52), 0 20px 48px 8px oklch(0 0 0 / 0.46);
+
+  --ambient-1: oklch(0.6449 0.2024 288.1131 / 0.38);
+  --ambient-2: oklch(0.6268 0.2325 303.9004 / 0.30);
+  --ambient-3: oklch(0.5854 0.2041 277.1173 / 0.34);
+
+  --grid-line: oklch(1.0000 0 0 / 0.040);
+  --grid-line-major: oklch(1.0000 0 0 / 0.075);
+
+  --group: oklch(0.1756 0.0041 285.8570);
+}
+
+/* Durations are not part of either palette: how long a thing takes to move is
+   the same question in light and in dark. Material's buckets -- a state change,
+   a thing resizing, a thing entering or leaving the screen -- plus one named
+   after what it is for, the way the page bucket is. */
+:root {
+  /* How big a cell of the background grid is. Not a palette question either --
+     the floor is the same floor with the lights on or off. */
+  --grid-cell: 2.5rem;
+
+  --motion-short: 150ms;
+  --motion-medium: 280ms;
+  --motion-long: 420ms;
+  --motion-page: 380ms;
+  /* How long a screen takes to arrive. There is no matching interval for one
+     leaving: the old screen is not faded out, it is simply not there any more,
+     so the two are never both on the window at once and never both legible. */
+  /* A control changing state in place, where short reads as a flick and medium
+     as hesitation. Only the switch travels a distance worth watching at this
+     size, and it wants to be followed rather than caught up with. */
+  --motion-control: 220ms;
 }
 
 @theme inline {
@@ -146,6 +256,12 @@
   --color-ring: var(--ring);
   --color-warning: var(--warning);
   --color-success: var(--success);
+  --color-speaker-1: var(--speaker-1);
+  --color-speaker-2: var(--speaker-2);
+  --color-speaker-3: var(--speaker-3);
+  --color-speaker-4: var(--speaker-4);
+  --color-speaker-5: var(--speaker-5);
+  --color-speaker-6: var(--speaker-6);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -181,9 +297,51 @@
   --tracking-widest: calc(var(--tracking-normal) + 0.1em);
   --tracking-normal: var(--tracking-normal);
 
+  --color-glass: var(--glass);
+  --color-glass-raised: var(--glass-raised);
+  --color-glass-edge: var(--glass-edge);
+  --color-scrim: var(--scrim);
+
+  --blur-glass: var(--glass-blur);
+
+  --shadow-elevation-1: var(--elevation-1);
+  --shadow-elevation-2: var(--elevation-2);
+  --shadow-elevation-3: var(--elevation-3);
+  --shadow-elevation-4: var(--elevation-4);
+
+  /* Material's four curves, named as it names them. "Standard" moves something
+     that stays on screen; "emphasized" is for what arrives or leaves and wants
+     to be noticed; the accelerate/decelerate halves are for one-way trips. */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+  --ease-emphasized-in: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --ease-emphasized-out: cubic-bezier(0.05, 0.7, 0.1, 1);
+  /* The one curve that overshoots. Reserved for something changing shape --
+     a thumb sliding, a panel opening -- where the small bounce reads as the
+     element having weight rather than as decoration. */
+  --ease-spring: linear(
+    0, 0.009, 0.035 2.1%, 0.141, 0.281 6.7%, 0.723 12.9%, 0.938 16.7%, 1.017,
+    1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%,
+    1.051 39.6%, 1.017 43.1%, 0.991, 0.977 51%, 0.974 53.8%, 0.975 57.1%,
+    0.997 69.8%, 1.003 76.9%, 1
+  );
+
   /* Used by the indeterminate Progress: uploads and the first chunk of a
      transcription have no percentage to report yet. */
   --animate-progress-slide: progress-slide 1.4s ease-in-out infinite;
+  --animate-rise: rise var(--motion-long) var(--ease-emphasized-out) both;
+  /* `emphasized`, not `emphasized-out`. A decelerating curve is right for
+     something moving into place and wrong for something simply becoming
+     visible: it puts seven tenths of the opacity into the first quarter of the
+     time, so the screen pops and then crawls, and what is left to watch is not
+     a fade. The emphasized curve holds near zero for a moment and does its
+     work in the middle, which is what reads as fading in. */
+  --animate-page-in: page-in var(--motion-page) var(--ease-emphasized) both;
+  --animate-dock: dock var(--motion-medium) var(--ease-emphasized) both;
+  --animate-undock: undock var(--motion-medium) var(--ease-emphasized) both;
+  --animate-ripple: ripple var(--motion-medium) var(--ease-emphasized-out);
+  --animate-sheen: sheen 2.4s var(--ease-standard) infinite;
+  --animate-drift: drift 34s ease-in-out infinite alternate;
 
   @keyframes progress-slide {
     0% {
@@ -193,6 +351,86 @@
       transform: translateX(300%);
     }
   }
+
+  /* Everything that appears comes up and settles rather than blinking on. It
+     comes up only: a row that also grows into place is a row whose text was
+     the wrong size for a moment, which is the same complaint as a page
+     arriving at 99%. */
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(0.75rem);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* A screen's controls arriving in the app bar, and leaving it again.
+
+     Nothing travels: they are already standing at the bar's underside when the
+     move happens, so what has to be smoothed is a joint and not a journey --
+     a card's own corners and its own fill giving way to the bar's. Two
+     properties, and neither of them is a size (see 10).
+
+     An animation rather than a transition, because changing parent is a full
+     unmount and no transition survives that. The fill is only faded on the way
+     in: going out, the bar has already shrunk back to a pill by the first
+     frame, and starting transparent there would show the page straight through
+     the panel. */
+  @keyframes dock {
+    from {
+      border-top-left-radius: 1.75rem;
+      border-top-right-radius: 1.75rem;
+      background-color: var(--card);
+    }
+  }
+
+  @keyframes undock {
+    from {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+  }
+
+  /* Out to full size fast, held for a moment, then gone. Growing and fading on
+     one clock is what made a press read as lag: the ink was at its darkest in
+     the first frame, when it was a dot nobody had looked at yet, and what was
+     left to watch was a wide pale wash still spreading long after the button
+     had done what it was for. Half a second of that is not feedback, it is
+     something catching up. */
+  @keyframes ripple {
+    from {
+      opacity: 0.16;
+      transform: translate(-50%, -50%) scale(0);
+    }
+    60% {
+      opacity: 0.16;
+    }
+    to {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+
+  @keyframes sheen {
+    from {
+      transform: translateX(-120%);
+    }
+    to {
+      transform: translateX(220%);
+    }
+  }
+
+  @keyframes drift {
+    from {
+      transform: translate3d(-3%, -2%, 0) scale(1);
+    }
+    to {
+      transform: translate3d(4%, 3%, 0) scale(1.12);
+    }
+  }
 }
 
 @layer base {
@@ -200,10 +438,516 @@
     @apply border-border outline-ring/50;
   }
 
+  /* The scrollbar's width is held whether or not there is a scrollbar. A short
+     page and a long one otherwise have viewports of different widths, so every
+     walk between them shifts the centred column by half a scrollbar -- and
+     inside a transition, where both are on screen at once, that shift is two
+     copies of the app bar a few pixels apart. The doubled text was never the
+     fade; it was the layout moving underneath it. */
+  html {
+    scrollbar-gutter: stable;
+  }
+
   body {
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
     font-synthesis-weight: none;
     text-rendering: optimizeLegibility;
+  }
+
+  /* The floor the light falls on, and the furthest thing back there is.
+     Two weights -- every cell, and a heavier line every fourth -- so it reads
+     as a plane with a scale to it rather than as graph paper.
+
+     It is on the root element rather than on the body, which has both its
+     pseudo-elements already: the body's background is the one that propagates
+     to the canvas and is painted behind every box on the page, so a layer here
+     at a lower z-index than the light still lands on top of the colour and
+     under the blobs. Fixed, because a grid that scrolls is a second thing
+     moving behind the thing you are reading. And masked away downward and to
+     the sides -- a grid that runs into the corners is a texture the eye keeps
+     going back to, and this one is only here to say the background has a
+     surface. */
+  html::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background-image:
+      linear-gradient(to right, var(--grid-line-major) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line-major) 1px, transparent 1px),
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size:
+      calc(var(--grid-cell) * 4) calc(var(--grid-cell) * 4),
+      calc(var(--grid-cell) * 4) calc(var(--grid-cell) * 4),
+      var(--grid-cell) var(--grid-cell),
+      var(--grid-cell) var(--grid-cell);
+    -webkit-mask-image: radial-gradient(
+      125% 115% at 50% -8%,
+      oklch(0 0 0) 0%,
+      oklch(0 0 0 / 0.5) 42%,
+      oklch(0 0 0 / 0.2) 72%,
+      transparent 100%
+    );
+    mask-image: radial-gradient(
+      125% 115% at 50% -8%,
+      oklch(0 0 0) 0%,
+      oklch(0 0 0 / 0.5) 42%,
+      oklch(0 0 0 / 0.2) 72%,
+      transparent 100%
+    );
+  }
+
+  /* The light the glass stands in. Two fixed layers of blurred colour, drifting
+     against each other on different clocks so the pattern never repeats
+     visibly; behind everything, and never in the way of a pointer. They keep
+     to the edges: the middle is the column the app is read in, and colour
+     under running text is the one place this light is in the way. */
+  body::before,
+  body::after {
+    content: "";
+    position: fixed;
+    inset: -25%;
+    z-index: -1;
+    pointer-events: none;
+    background-repeat: no-repeat;
+    will-change: transform;
+  }
+
+  body::before {
+    background-image:
+      radial-gradient(38rem 38rem at 18% 12%, var(--ambient-1), transparent 70%),
+      radial-gradient(32rem 32rem at 82% 8%, var(--ambient-2), transparent 70%);
+    animation: var(--animate-drift);
+  }
+
+  body::after {
+    background-image:
+      radial-gradient(40rem 40rem at 72% 78%, var(--ambient-3), transparent 70%),
+      radial-gradient(28rem 28rem at 10% 88%, var(--ambient-2), transparent 70%);
+    animation: drift 46s ease-in-out infinite alternate-reverse;
+  }
+
+  /* Scrollbars that match the surfaces rather than the operating system. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  /* A name says "this is the same thing before and after", and it is only true
+     of one kind of change. Left on the rest of the time it lifts the element
+     out of the snapshot for every other kind as well: toggle the palette and
+     the settings list, the card at the top of a transcript and every staged
+     file are each cut out of the picture and cross-faded alone, on their own
+     clock, over a page that is being revealed on another. That is the flicker.
+
+     So the name is declared where it belongs -- inline, because most of these
+     have to be unique per row -- and taken away here for every change it was
+     not meant for. `!important` because inline is what it is arguing with.
+
+     `quiet` is the only kind left. No navigation opens a transition now: the
+     app bar carried a name for the one that did, a row opening its page, and
+     that trip is gone for the reason written at the bottom of this file. */
+  html:not([data-quiet-morph]) [data-morph="quiet"] {
+    view-transition-name: none !important;
+  }
+}
+
+/* A translucent surface, in the two weights the app needs: the resting one for
+   cards and lists, the raised one for anything that floats over them and has to
+   stay readable against whatever it happens to cover.
+
+   The four inset layers are what makes it read as a slab rather than a tinted
+   rectangle, and they are a bevel lit from directly above. In order: the top
+   edge catches the light; the light that made it through the body comes back
+   up off the bottom edge, which is the one cue that says the thing has a
+   thickness at all; the body's own shade falls just under the lit edge; and
+   the last is the same shade at the sides, so a wide surface does not read as
+   a strip of paper. The light does not move, and nothing here moves across the
+   viewport, so there is nothing to recompute -- the direction is written into
+   the offsets once and costs a repaint of nothing. */
+@utility glass {
+  background-color: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border-color: var(--glass-edge);
+  box-shadow:
+    var(--elevation-2),
+    inset 0 1px 0 0 var(--glass-sheen),
+    inset 0 -1px 0 0 var(--glass-glow),
+    inset 0 8px 10px -10px var(--glass-shade),
+    inset 0 0 12px -6px var(--glass-shade);
+}
+
+/* The same surface at the size of a control, and one layer short of it. A card
+   is tall enough that the light coming back up off its bottom edge is read as
+   thickness; a thirty-two pixel button is not. There the bounce lands directly
+   against the hairline it is a pixel inside of, and two light lines a pixel
+   apart are not depth -- they are a border drawn twice, which is what a row of
+   outlined buttons was reported as. So a control keeps the lit top edge and
+   the shade beneath it and gives up the return light: the cue that says "this
+   has a thickness" is the one there is no room for. */
+@utility glass-control {
+  background-color: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border-color: var(--glass-edge);
+  box-shadow:
+    var(--elevation-2),
+    inset 0 1px 0 0 var(--glass-sheen),
+    inset 0 8px 10px -10px var(--glass-shade);
+}
+
+@utility glass-raised {
+  background-color: var(--glass-raised);
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(200%);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(200%);
+  border-color: var(--glass-edge);
+  box-shadow:
+    var(--elevation-3),
+    inset 0 1px 0 0 var(--glass-sheen),
+    inset 0 -1px 0 0 var(--glass-glow),
+    inset 0 12px 14px -14px var(--glass-shade),
+    inset 0 0 16px -8px var(--glass-shade);
+}
+
+/* A group, not a surface.
+
+   Material stopped drawing a box around things that merely belong together. A
+   grouping container is a tonal step -- a fill a shade off the background --
+   with no outline and no shadow, because an outline is a boundary worth
+   defending and a shadow is a claim to be floating, and a region of a page is
+   neither. It is lying flat on the page; it is just a different shade of it.
+
+   Opaque, and that is the load-bearing word. It was frosted for a while, and
+   frosting cannot survive being faded in: an element at less than full opacity
+   is its own backdrop root, so for the whole length of a screen's arrival every
+   panel inside it has nothing behind it to sample and simply is not frosted.
+   The blur can then only appear in one step at the end -- discretely, never
+   smoothly -- and that step is what reads as every block on the page
+   flickering. Standing the surfaces in for themselves during the fade moved the
+   step rather than removing it. A colour has no such problem: it is the same
+   colour at every opacity, so the page fades in as one piece.
+
+   Nothing is lost by it. The blur here was only ever hiding the grid ruled
+   across the background, and an opaque shade hides it perfectly. Glass is left
+   to what floats above the page and never fades with it: the bar, a menu, a
+   dialog. */
+@utility panel {
+  background-color: var(--group);
+}
+
+/* A pill while it is only a bar, and a rounded box once a screen has hung its
+   own controls inside it. The radius is the one it already had -- twenty-eight
+   pixels is exactly half the lifted bar's height, which is what made it a pill
+   in the first place -- so the corners do not move when the surface grows. What
+   changes is only how far down it reaches.
+
+   Plain CSS rather than a `has-` utility, because it has to outrank
+   `rounded-full` on the same element and reads as one rule about one shape. */
+header[data-bar] > :has([data-bar-extra]:not(:empty)) {
+  border-radius: 1.75rem;
+}
+
+/* The resting bar gets the same treatment for the same reason, and only the
+   resting one: at the top of a page the whole of what is behind it is the
+   background, so the colour its blur resolves to can be written down. Once the
+   page has moved under it the backdrop is the page, which no single colour
+   stands for -- so the lifted bar is left to go clear, under a screen that is
+   being replaced anyway. */
+html[data-quiet-morph] header[data-bar] > .glass,
+html[data-theme-morph] header[data-bar] > .glass {
+  background-color: var(--background);
+  background-image: linear-gradient(
+    color-mix(in oklab, var(--glass) 40%, transparent),
+    color-mix(in oklab, var(--glass) 40%, transparent)
+  );
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Cards, alerts and badges are inside the page too, so they go the same way:
+   opaque, and no backdrop to want. `--card` is what their glass resolves to
+   over the background in either palette, which is why it is the token already.
+   Scoped to `main`, because the surfaces that keep their frosting -- the bar,
+   and the menus and dialogs that portal out of here -- are all outside it.
+   The transcript's controls are outside it too, and by the same door: they are
+   rendered through a portal into the bar's own island, so they are the bar's
+   glass rather than a second sheet of it. */
+main :is(.glass, .glass-control) {
+  background-color: var(--card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* The things typed into go with them, and they were the worst case of it: a
+   field carried `--glass` as a colour and nothing else -- no blur ever came
+   with it, because `bg-glass` is a fill and `glass` is the surface -- so what
+   a select or an input actually did on this page was let the ruled grid run
+   straight through the middle of it. Frosting them is not the answer for the
+   reason nothing else inside the page is frosted; the answer is the colour the
+   frosting would have resolved to, which is `--card` in both palettes, and
+   which is what these fields already looked like anywhere the grid did not
+   happen to show.
+
+   Focus steps to `--muted` rather than lightening the glass, so the change is
+   the same change in both palettes -- on a white card there is no lighter left
+   to go. Unlayered, because it has to outrank the utilities the components
+   name. */
+main :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) {
+  background-color: var(--card);
+}
+
+main :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):focus-visible {
+  background-color: var(--muted);
+}
+
+/* A surface inside a surface is a box drawn inside a box: two edges, two fills
+   and two shadows all saying the same thing about the same content, and the
+   inner one claiming to float above a thing it is part of. Where a whole region
+   is a panel, the cards in it keep their edge -- they are still divisions of
+   the panel -- and give up everything else.
+
+   Unlayered on purpose. `glass` is a utility, and a layered rule loses to the
+   utilities layer however specific it is; this has to be the last word. */
+[data-panel] [data-slot="card"] {
+  background-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+/* Material's ink, from where the finger landed. The coordinates arrive as
+   custom properties from a pointerdown handler; everything else is CSS, so a
+   press animates even while React is busy. */
+@utility ripple {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: var(--ripple-y, 50%);
+    left: var(--ripple-x, 50%);
+    width: max(230%, 5rem);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0);
+    pointer-events: none;
+  }
+
+  &[data-ripple="on"]::after {
+    animation: var(--animate-ripple);
+  }
+}
+
+/* While a transition is running, it is the only thing running.
+
+   The new state is not photographed, it is rendered live inside the snapshot,
+   so every ordinary transition on the page keeps playing in there against the
+   one the browser is drawing over it. The palette is the clearest case: a bar
+   that fades its own background over 280ms, inside a circle that is revealing
+   the new colours over 420ms, arrives at the new colour twice. The same goes
+   for a header resizing because the new page is shorter and the scroll landed
+   somewhere else. Everything that would have eased is simply already there.
+
+   `data-settling` holds the freeze open for a frame past the end. Lifting it
+   at the instant the morph flag comes off means the properties the morph was
+   standing in for -- the bar's fill and its blur, which are both in its own
+   transition list -- change on the same tick that their durations come back,
+   so the bar spent the next 280ms fading from its stand-in into its glass.
+   That is the flicker after a page change: not the transition, but everything
+   the transition had been holding still, let go all at once. */
+html[data-quiet-morph] *,
+html[data-theme-morph] *,
+html[data-settling] * {
+  transition-duration: 0s !important;
+}
+
+/* Moving between two screens is one continuous thing: what stays keeps its
+   place, what is replaced is replaced in front of you. The names are assigned
+   in the components; these are the curves they travel on. */
+@media not (prefers-reduced-motion: reduce) {
+  /* One clock for the whole transition. The group carried this duration and the
+     images did not, so everything that cross-fades did it in the browser's own
+     quarter of a second while the boxes around them were still moving -- a
+     single change ending twice. */
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: var(--motion-page);
+    animation-timing-function: var(--ease-emphasized);
+  }
+
+  /* How big the picture of a screen is, said out loud rather than inherited.
+
+     The box around it animates between the height of the page being left and
+     the height of the page arriving -- that is what a group does -- and if the
+     picture is stretched to fill that box, the page is drawn a little shorter
+     than it is and unfolds to its real height. Which is the whole complaint,
+     and it is browser-specific, because this is exactly the corner where the
+     two engines' own stylesheets differ. So: each picture keeps its own size,
+     pinned to the top of the box, and simply overflows it. Nothing clips. */
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    top: 0;
+    width: 100%;
+    height: auto;
+    /* `none` rather than `fill`, and this is the part that matters: it says the
+       picture is never scaled, whatever the box does. Sizing the box correctly
+       is not enough, because it is the engine that decides whether the picture
+       obeys the box, and `main` is one box whose height genuinely differs from
+       page to page -- there is no `self-start` to be had for a page. Anchored
+       at its top-left corner it simply overflows, and nothing clips. */
+    object-fit: none;
+    object-position: top left;
+  }
+
+  /* A screen is never faded, and this is the whole of what a page change is
+     here: the parts that are the same are held still by their names, and the
+     part that is different is simply different, from one frame to the next.
+
+     It used to cross-fade, and then fade through, and the whole background
+     went with it. Everything on this page is painted inside the root's
+     snapshot -- the grid, the drifting light, the panels, every field on the
+     screen -- so anything done to the root is done to all of it at once. What
+     the eye got was the page dimming and coming back, with the bar and the
+     settings list standing perfectly still through it because they carry names
+     and are captured apart. That asymmetry is what kept being reported as the
+     background and the inputs flickering, and no amount of adjusting the two
+     halves of the fade could fix it: the fade was the flicker. A screen change
+     is not a thing moving, and there is nothing here for a transition to
+     describe.
+
+     "Nothing" has to be said as an opacity and not as the absence of an
+     animation. Left simply unanimated the outgoing snapshot keeps an opacity
+     of one for the whole length of the transition, and it is only hidden
+     inasmuch as the incoming one is painted over it -- as far as the edges of
+     its own box, and the two boxes are not the same size. `object-fit: none`
+     forbids a picture from being scaled to its box, so wherever the screen
+     that left was the bigger one it went on showing round the edges of the one
+     that replaced it: a whole page's worth of leftovers standing beside the
+     page. So the old screen is told to be gone, and the new one to be here.
+
+     `mix-blend-mode` goes back to normal with the animation. `plus-lighter` is
+     what keeps the colours right while two complementary images are both half
+     there; with nothing fading there is no pair, and adding a whole image to
+     whatever is under it is just a second helping of the same page. */
+  ::view-transition-old(*):only-child,
+  html[data-quiet-morph]::view-transition-old(root) {
+    animation: none;
+    opacity: 0;
+  }
+
+  ::view-transition-new(*):only-child,
+  html[data-quiet-morph]::view-transition-new(root) {
+    animation: none;
+    opacity: 1;
+    mix-blend-mode: normal;
+  }
+
+  /* Everything else holds perfectly still. Anything left animating keeps the
+     transition alive -- the bar cross-fading against a picture of itself, a
+     name whose element never moved -- and for as long as it is alive what is on
+     screen is a photograph of the page rather than the page, which is time for
+     every way the two can differ to be seen. So on a `quiet` change only the
+     named rows move, and nothing else does. */
+  html[data-quiet-morph]::view-transition-group(*),
+  html[data-quiet-morph]::view-transition-old(*),
+  html[data-quiet-morph]::view-transition-new(*) {
+    animation: none;
+  }
+
+  /* And the box does not travel either: with neither picture moving there is
+     nothing for an interpolated frame to belong to. */
+  html[data-quiet-morph]::view-transition-group(root) {
+    animation: none;
+  }
+
+  /* A row on a list and the page it opens are the same recording, and for a
+     while the one became the other: the row was named, the transcript's frame
+     carried the same name, and the box travelled between them while the two
+     pictures cross-faded.
+
+     It is gone, and it was the last transition opened on a navigation. The box
+     a name travels on is interpolated between the height it had and the height
+     it will have, and an engine may draw the captured picture stretched to fill
+     it -- which is the page arriving squashed and unfolding, the complaint this
+     whole section is written around. Every other named box in the app was
+     either dropped or is one that does not change size. This one changes size
+     by definition: it runs from a 69-pixel row to a 250-pixel page, the largest
+     such box here, so it was the worst case of the defect rather than the
+     exception to it. `object-fit: none` above does not help -- it is the engine
+     that decides whether a picture obeys its box, and one of the two does not.
+
+     So a row opening its page is a plain navigation and the page arrives with
+     `page-in`, like every other screen. */
+  /* Changing the palette is one circle opening from the control that changed
+     it. The old theme sits still underneath and is simply covered. */
+  html[data-theme-morph]::view-transition-old(root) {
+    animation: none;
+  }
+
+  html[data-theme-morph]::view-transition-new(root) {
+    animation: theme-reveal var(--motion-long) var(--ease-emphasized-out) both;
+    mix-blend-mode: normal;
+  }
+
+  html[data-theme-morph]::view-transition-old(root) {
+    z-index: 0;
+  }
+
+  html[data-theme-morph]::view-transition-new(root) {
+    z-index: 1;
+  }
+}
+
+/* A screen arriving: opacity, and a little way to travel.
+
+   Opacity alone came out stepped, and the arithmetic says it had to. In the
+   dark palette a panel is nine values out of two hundred and fifty-five away
+   from the background it fades up from, so a third of a second of fading is
+   nine discrete steps, each held for four frames. There is no dithering to be
+   had in CSS and no more levels to be found. What there is, is something else
+   for the eye to follow: an edge that is moving cannot be read as a series of
+   flat fields, and twelve pixels is enough to do it.
+
+   Twelve, and not more, because this is a region as wide as the window: a
+   picture that slides any real distance brings a band of bare background in
+   behind it. And it does not scale, because a screen at 99% has every edge,
+   every gap and every line of text a percent off, with the real thing on
+   screen a moment later to be compared against. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+}
+
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0% at var(--reveal-x, 50%) var(--reveal-y, 50%));
+  }
+  to {
+    clip-path: circle(150% at var(--reveal-x, 50%) var(--reveal-y, 50%));
+  }
+}
+
+/* Asked not to animate, animate nothing: every effect above is decoration over
+   a layout that already works without it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
   }
 }
