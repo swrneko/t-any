@@ -1,10 +1,13 @@
-import { Loader2, Search, Trash2, VolumeX } from "lucide-react";
+import { Loader2, Trash2, VolumeX } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { api, MARK_END, MARK_START, type Job, type SearchHit } from "@/api/client";
+import { ArchiveBar, matches, NO_FILTERS, type Filters } from "@/components/ArchiveBar";
 import { formatBytes, JobList } from "@/components/JobList";
+import { MorphLink } from "@/components/MorphLink";
+import { Pager, usePaging } from "@/components/Pager";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,7 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { useApiErrorMessage } from "@/useApiError";
 import type { JobFeed } from "@/useJobFeed";
 
@@ -42,6 +44,7 @@ export function HistoryPage({ feed }: { feed: JobFeed }) {
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,6 +76,24 @@ export function HistoryPage({ feed }: { feed: JobFeed }) {
 
   const chosen = feed.archive.filter((job) => picked.has(job.id));
 
+  // Filtering happens before paging and before anything is counted, so "1-10 of
+  // 16" is ten of the sixteen being shown rather than of the archive. `now` is
+  // read once per render: a period counted from a different instant for every
+  // row is a list that can disagree with itself.
+  const now = Date.now();
+  const kept = feed.archive.filter((job) => matches(job, filters, now));
+
+  // Over the whole archive, not over the page: a selection survives turning to
+  // the next one, which is the only reason to select across pages at all.
+  const paging = usePaging(kept.length);
+  const shown = kept.slice(paging.from - 1, paging.to);
+
+  // The filters narrow what was found as well as what was listed: a hit points
+  // at a recording, and a recording the filters have put away should not come
+  // back because a word in it matched.
+  const keptIds = new Set(kept.map((job) => job.id));
+  const found = filters === NO_FILTERS ? hits : (hits?.filter((hit) => keptIds.has(hit.job_id)) ?? null);
+
   const commit = async () => {
     if (!pending) return;
     setError(null);
@@ -103,17 +124,12 @@ export function HistoryPage({ feed }: { feed: JobFeed }) {
         </Alert>
       )}
 
-      <div className="relative">
-        <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          autoFocus
-          value={query}
-          className="pl-9"
-          aria-label={t("search.label")}
-          placeholder={t("search.placeholder")}
-          onChange={(event) => setParams(event.target.value ? { q: event.target.value } : {})}
-        />
-      </div>
+      <ArchiveBar
+        query={query}
+        onQuery={(next) => setParams(next ? { q: next } : {})}
+        filters={filters}
+        onFilters={setFilters}
+      />
 
       {!searching && chosen.length > 0 && (
         <div className="flex flex-wrap items-center gap-3">
@@ -140,39 +156,52 @@ export function HistoryPage({ feed }: { feed: JobFeed }) {
       )}
 
       {!searching &&
-        (feed.archive.length > 0 ? (
-          <JobList
-            jobs={feed.archive}
-            selected={picked}
-            onSelect={select}
-            onDelete={(job) => setPending({ jobs: [job], audioOnly: false })}
-            onDropAudio={(job) => setPending({ jobs: [job], audioOnly: true })}
-          />
+        (kept.length > 0 ? (
+          <>
+            {/* Keyed on the page, so turning one is an arrival rather than the
+                same rows quietly holding different words. The filters are in
+                the key too: a narrowed list is a different list. */}
+            <JobList
+              key={`${paging.page}-${paging.size}-${filters.period}${filters.length}${filters.kind}`}
+              jobs={shown}
+              selected={picked}
+              onSelect={select}
+              onDelete={(job) => setPending({ jobs: [job], audioOnly: false })}
+              onDropAudio={(job) => setPending({ jobs: [job], audioOnly: true })}
+            />
+            <Pager paging={paging} total={kept.length} />
+          </>
         ) : (
-          feed.jobs !== null && <p className="text-sm text-muted-foreground">{t("history.empty")}</p>
+          // An archive with nothing in it and an archive with nothing left
+          // after the filters look identical and are not the same problem.
+          feed.jobs !== null && (
+            <p className="text-sm text-muted-foreground">
+              {t(feed.archive.length > 0 ? "history.noMatch" : "history.empty")}
+            </p>
+          )
         ))}
 
-      {searching && busy && hits === null && (
+      {searching && busy && found === null && (
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
       )}
 
-      {searching && hits !== null && hits.length === 0 && (
+      {searching && found !== null && found.length === 0 && (
         <p className="text-sm text-muted-foreground">{t("search.nothing", { query })}</p>
       )}
 
-      {searching && hits !== null && hits.length > 0 && (
+      {searching && found !== null && found.length > 0 && (
         <Card className="gap-0 overflow-hidden p-0">
-          {hits.map((hit) => (
-            <Link
+          {found.map((hit) => (
+            <MorphLink
               key={`${hit.job_id}-${hit.idx}`}
               to={`/jobs/${hit.job_id}?at=${Math.floor(hit.start)}`}
-              className="grid gap-1 border-t border-border px-4 py-3 first:border-t-0 hover:bg-accent/50"
+              className="ripple grid animate-rise gap-1 border-t border-border px-4 py-3 transition-colors duration-(--motion-short) first:border-t-0 hover:bg-accent/50"
             >
               <span className="truncate text-sm font-medium">{hit.job_title}</span>
               <span className="text-sm text-muted-foreground">
                 <Excerpt text={hit.excerpt} />
               </span>
-            </Link>
+            </MorphLink>
           ))}
         </Card>
       )}

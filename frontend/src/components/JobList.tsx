@@ -1,7 +1,6 @@
 import { Layers, Trash2, VolumeX, X } from "lucide-react";
-import type { MouseEvent, ReactNode } from "react";
+import type { MouseEvent, PointerEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 
 import { api, type Job, type JobStatus } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +13,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { pressRipple, useMorphNavigate } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 import { useCodeMessage } from "@/useApiError";
 import { isPending } from "@/useJobFeed";
 
@@ -45,28 +46,55 @@ export function JobList(props: JobListProps) {
   const { t } = useTranslation();
   const { jobs, selected, onSelect } = props;
 
+  let position = 0;
+
   return (
     <Card className="gap-0 divide-y divide-border overflow-hidden p-0">
       {blocksOf(jobs).map((block) =>
         block.batch === null ? (
-          <JobRow key={block.jobs[0].id} job={block.jobs[0]} {...props} />
+          <JobRow key={block.jobs[0].id} job={block.jobs[0]} at={position++} {...props} />
         ) : (
           // Files dropped in together and transcribed apart. Left as loose rows
           // they read as five unrelated recordings that happen to be adjacent,
           // which is exactly what they are not.
+          //
+          // Said with structure rather than with colour, and that is not a
+          // preference. The block used to carry an accent fill and an accent
+          // rule down its left edge -- and `accent` is the colour a row takes
+          // when the pointer is over it or when it has been ticked, so a batch
+          // was painted in the one colour on this screen that already means
+          // "chosen". Four recordings that arrived together looked like four
+          // recordings somebody had selected. There is no tint available that
+          // says grouping here: the list's own hover state has the only one.
+          //
+          // So the members are indented under a caption and threaded on a
+          // hairline, which is how every file tree has said "these are inside
+          // that" -- and indentation is the one signal a selection never uses.
+          // The caption's checkbox stays in the outer column and the members'
+          // move in with them, so ticking the group and ticking one of its
+          // members are visibly different gestures.
+          //
+          // Under all of it, a tonal step, which is Material's answer to
+          // "these belong together" and this file's own (see the `panel`
+          // utility). `--group` is the token for that and it is the wrong one
+          // here: it is set one shade off `--background`, and this block sits
+          // inside a card, where it lands two values out of 255 from the fill
+          // it is meant to be distinguished from. `--muted` is the step that
+          // exists relative to a card -- ten values in dark, the same in light,
+          // visible in both, and neutral enough that nothing about it says
+          // "chosen".
           <div
             key={block.batch}
-            className="border-l-2 border-primary/50 bg-accent/20"
+            className="animate-rise bg-muted"
+            style={{ animationDelay: delayFor(position++) }}
           >
-            <div className="flex items-center gap-3 px-4 py-2">
+            <div className="flex items-center gap-3 px-4 py-2.5">
               {onSelect && (
                 <Checkbox
                   checked={block.jobs.every((job) => selected?.has(job.id))}
                   aria-label={t("jobs.batch", { count: block.jobs.length })}
                   onCheckedChange={(picked) =>
-                    block.jobs.forEach((job) =>
-                      onSelect(job.id, picked === true),
-                    )
+                    block.jobs.forEach((job) => onSelect(job.id, picked === true))
                   }
                 />
               )}
@@ -75,7 +103,13 @@ export function JobList(props: JobListProps) {
                 {t("jobs.batch", { count: block.jobs.length })}
               </span>
             </div>
-            <div className="divide-y divide-border border-t border-border">
+            {/* The group is one arrival; its members do not each get one of
+                their own or the block would ripple down the screen.
+
+                The rule along the top is the caption's, and the block's own
+                bottom edge is drawn by the list it sits in -- so the block is
+                closed on both sides rather than only underneath. */}
+            <div className="ml-6 divide-y divide-border border-t border-l border-border">
               {block.jobs.map((job) => (
                 <JobRow key={job.id} job={job} {...props} />
               ))}
@@ -85,6 +119,13 @@ export function JobList(props: JobListProps) {
       )}
     </Card>
   );
+}
+
+/** Rows arrive one after another rather than all at once, but the queue stops
+ *  waiting after the first handful: a list of forty should not take two seconds
+ *  to finish appearing. */
+function delayFor(at: number): string {
+  return `${Math.min(at, 8) * 45}ms`;
 }
 
 interface Block {
@@ -123,22 +164,39 @@ function blocksOf(jobs: Job[]): Block[] {
 
 function JobRow({
   job,
+  at,
   onCancel,
   selected,
   onSelect,
   onDelete,
   onDropAudio,
-}: JobListProps & { job: Job }) {
+}: JobListProps & { job: Job; at?: number }) {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
+  const navigate = useMorphNavigate();
   const describeCode = useCodeMessage();
+
+  const address = `/jobs/${job.id}`;
+
+  // The row used to name itself for the length of the trip, so that it became
+  // the page rather than being replaced by it. It cannot: the box that travels
+  // grows from a row to a page, and an engine that stretches a picture into its
+  // box draws the whole page squashed and lets it unfold. The page arrives on
+  // its own now, like every other screen.
+  const open = () => {
+    void navigate(address);
+  };
 
   return (
     <div
-      className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-accent/50"
+      className={cn(
+        "ripple flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors duration-(--motion-short) ease-standard hover:bg-accent/50",
+        at !== undefined && "animate-rise",
+      )}
+      style={{ animationDelay: at === undefined ? undefined : delayFor(at) }}
+      onPointerDown={(event: PointerEvent<HTMLDivElement>) => pressRipple(event)}
       // Every row, not only the finished ones: the job's own page reports
       // the work while it happens and the words once it is over.
-      onClick={() => navigate(`/jobs/${job.id}`)}
+      onClick={open}
     >
       {onSelect && (
         <Checkbox
